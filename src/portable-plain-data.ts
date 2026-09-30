@@ -1,5 +1,6 @@
 // Keep canonicalization stable if a later handler replaces global methods.
 const ownKeys = Object.keys;
+const create = Object.create;
 const stringify = JSON.stringify;
 
 /** Reject getters, hidden keys, non-JSON values, prototypes, and cycles before policy evaluation. */
@@ -43,7 +44,7 @@ export function canonicalJson(value: unknown): string | undefined {
       return array;
     }
     if (item !== null && typeof item === "object") {
-      const object: Record<string, unknown> = Object.create(null);
+      const object: Record<string, unknown> = create(null);
       const keys = ownKeys(item);
       for (let index = 0; index < keys.length; index++) {
         const key = keys[index]!;
