@@ -13,7 +13,9 @@ export class PortableCallLedger {
   private readonly seen = new Set<string>();
 
   claim(action: Readonly<PortableAction>): boolean {
-    if (![action.host, action.sessionId, action.callId].every(value => typeof value === "string" && value.length > 0)) return false;
+    if (typeof action.host !== "string" || !action.host
+        || typeof action.sessionId !== "string" || !action.sessionId
+        || typeof action.callId !== "string" || !action.callId) return false;
     const key = JSON.stringify([action.host, action.sessionId, action.callId]);
     if (this.seen.has(key)) return false;
     this.seen.add(key);
@@ -96,7 +98,11 @@ function detachObjectPrototypes(value: unknown): void {
 function hasDetachedObjectPrototypes(value: unknown): boolean {
   if (value === null || typeof value !== "object") return true;
   if (!Array.isArray(value) && Object.getPrototypeOf(value) !== null) return false;
-  return Object.values(value).every(hasDetachedObjectPrototypes);
+  const children = Object.values(value);
+  for (let index = 0; index < children.length; index++) {
+    if (!hasDetachedObjectPrototypes(children[index])) return false;
+  }
+  return true;
 }
 
 /**
