@@ -80,7 +80,7 @@ function normalize(tool: string, input: Record<string, unknown>): { tool: string
 }
 
 /** Pure policy boundary for host integrations; does not itself install hooks. */
-export async function evaluatePortableAction(action: PortableAction, options: { config: ActionGuardConfig }): Promise<PortableDecision> {
+async function evaluatePortableActionUnchecked(action: PortableAction, options: { config: ActionGuardConfig }): Promise<PortableDecision> {
   if (!action || typeof action !== "object" || Array.isArray(action)) {
     return reject("Invalid action envelope; cannot establish origin or scope");
   }
@@ -119,5 +119,14 @@ export async function evaluatePortableAction(action: PortableAction, options: { 
     return { level, intercepted: true, reason, verdict };
   } catch {
     return reject("Policy evaluation failed; action was not authorized");
+  }
+}
+
+/** Fail closed even when host-supplied options are malformed or throw on access. */
+export async function evaluatePortableAction(action: PortableAction, options: { config: ActionGuardConfig }): Promise<PortableDecision> {
+  try {
+    return await evaluatePortableActionUnchecked(action, options);
+  } catch {
+    return reject("Malformed action or policy; action was not authorized");
   }
 }

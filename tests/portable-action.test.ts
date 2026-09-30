@@ -77,6 +77,10 @@ test("malformed adapter arguments fail closed rather than throwing before evalua
     assert.equal(result.level, "deny");
     assert.equal(result.intercepted, false);
   }
+  const getterConfig = { get tools(): never { throw Error("malformed policy"); } };
+  const getterResult = await evaluatePortableAction(action, { config: getterConfig as never });
+  assert.equal(getterResult.level, "deny");
+  assert.equal(getterResult.intercepted, false);
   const missingAction = await evaluatePortableAction(null as never, { config });
   assert.equal(missingAction.level, "deny");
   assert.equal(missingAction.intercepted, false);

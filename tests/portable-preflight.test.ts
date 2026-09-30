@@ -40,6 +40,14 @@ test("non-JSON or hidden effect-bearing fields are rejected before approval", as
   assert.equal(prompted, false);
 });
 
+test("malformed policy access fails closed without prompting or escaping as an exception", async () => {
+  const malformed = { get tools(): never { throw Error("malformed policy"); } } as unknown as typeof config;
+  let prompted = false;
+  const result = await preflightPortableAction(action(), { config: malformed }, async () => { prompted = true; return true; });
+  assert.equal(result.block, true);
+  assert.equal(prompted, false);
+});
+
 test("prototype executor writes only the frozen action returned by an approved permit", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pi-warden-preflight-"));
   const path = join(directory, "probe.txt");
