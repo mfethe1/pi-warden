@@ -26,6 +26,19 @@ test("lexically in-project writes require approval even when the guard allows th
   assert.equal(result.level, "confirm");
 });
 
+test("portable approval floor survives a permissive or disabled guard configuration", async () => {
+  const permissive = { ...config, enabled: false, tools: [], failOpen: true };
+  for (const [host, tool, input] of [
+    ["pi", "bash", { command: "printf 'ok'" }],
+    ["claude", "Write", { file_path: "/work/a.ts", content: "ok" }],
+    ["hermes", "functions.patch", { mode: "replace", path: "/work/a.ts", old_string: "a", new_string: "b" }],
+  ] as const) {
+    const result = await evaluatePortableAction({ ...base, host, tool, input }, { config: permissive });
+    assert.equal(result.level, "confirm", `${host}/${tool}`);
+    assert.equal(result.intercepted, true);
+  }
+});
+
 test("unknown hosts, cross-host tool aliases and arbitrary code fail closed", async () => {
   for (const [host, tool, input] of [
     ["chatgpt", "terminal", { command: "rm -rf /" }],
