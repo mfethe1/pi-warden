@@ -231,6 +231,34 @@ test("inherited toJSON cannot conceal a changed Pi execution command", async () 
   }
 });
 
+test("replacing Object.setPrototypeOf cannot let inherited array toJSON hide an unapproved edit", async () => {
+  const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
+  const request: PortableAction = { ...action(), tool: "edit", input };
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  input.edits[0]!.newText = "UNAPPROVED";
+  const originalSet = Object.getOwnPropertyDescriptor(Object, "setPrototypeOf");
+  const originalJson = Object.getOwnPropertyDescriptor(Array.prototype, "toJSON");
+  Object.defineProperty(Object, "setPrototypeOf", {
+    configurable: true, value: (target: object) => target,
+  });
+  Object.defineProperty(Array.prototype, "toJSON", {
+    configurable: true, value: () => {
+      const edits = [{ oldText: "before", newText: "after" }];
+      Reflect.setPrototypeOf(edits, null);
+      return edits;
+    },
+  });
+  try {
+    assert.equal(bindPiExecutionInput(request, permit).block, true);
+  } finally {
+    if (originalSet) Object.defineProperty(Object, "setPrototypeOf", originalSet);
+    if (originalJson) Object.defineProperty(Array.prototype, "toJSON", originalJson);
+    else Reflect.deleteProperty(Array.prototype, "toJSON");
+  }
+});
+
 test("replacing getOwnPropertyDescriptor cannot smuggle a changing command getter into Pi execution", async () => {
   const request = action();
   const permit = await preflightPortableAction(request, { config }, async () => true);
