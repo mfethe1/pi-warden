@@ -1,6 +1,6 @@
-// Keep validation and canonicalization on the same own-key primitive even if a
-// later handler replaces Object.keys after approval.
+// Keep canonicalization stable if a later handler replaces global methods.
 const ownKeys = Object.keys;
+const stringify = JSON.stringify;
 
 /** Reject getters, hidden keys, non-JSON values, prototypes, and cycles before policy evaluation. */
 export function plainData(value: unknown, seen = new WeakSet<object>()): boolean {
@@ -53,5 +53,5 @@ export function canonicalJson(value: unknown): string | undefined {
     }
     return item;
   };
-  return JSON.stringify(copy(value));
+  return stringify(copy(value));
 }
