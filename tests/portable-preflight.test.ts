@@ -4,7 +4,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config.js";
-import { preflightPortableAction } from "../src/portable-preflight.js";
+import type { PortableAction } from "../src/portable-action.js";
+import { executePortableAction, preflightPortableAction } from "../src/portable-preflight.js";
 import type { PortableApproval } from "../src/portable-preflight.js";
 
 const config = defaultConfig().action;
@@ -71,6 +72,54 @@ test("prototype executor writes only the frozen action returned by an approved p
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("opt-in executor binds a real file write to the approved snapshot", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-warden-executor-"));
+  const path = join(directory, "probe.txt");
+  const request = { ...action(), cwd: directory, tool: "write", input: { path, content: "approved" } };
+  let executions = 0;
+  const execute = async (approved: Readonly<PortableAction>) => {
+    executions++;
+    assert.equal(Object.isFrozen(approved), true);
+    assert.equal(Object.isFrozen(approved.input), true);
+    await writeFile(approved.input.path as string, approved.input.content as string);
+    return "written";
+  };
+  try {
+    const headless = await executePortableAction(request, { config }, undefined, execute);
+    const declined = await executePortableAction(request, { config }, async () => false, execute);
+    assert.equal(headless.block, true);
+    assert.equal(declined.block, true);
+    assert.equal(executions, 0);
+    await assert.rejects(readFile(path, "utf8"), { code: "ENOENT" });
+
+    const approved = await executePortableAction(request, { config }, async () => {
+      // A changed request cannot execute, even if the approver says yes.
+      request.input.content = "changed before approval resolves";
+      return true;
+    }, execute);
+    assert.equal(approved.block, true);
+    assert.equal(executions, 0);
+
+    request.input.content = "approved";
+    const completed = await executePortableAction(request, { config }, async () => true, async (snapshot) => {
+      request.input.content = "changed after approval";
+      return execute(snapshot);
+    });
+    assert.deepEqual(completed, { block: false, result: "written" });
+    assert.equal(executions, 1);
+    assert.equal(await readFile(path, "utf8"), "approved");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("opt-in executor propagates failures rather than reporting a pre-execution block", async () => {
+  await assert.rejects(
+    executePortableAction(action(), { config }, async () => true, async () => { throw Error("tool failed"); }),
+    /tool failed/,
+  );
 });
 
 test("approval is fresh per call and rejects changed scope while awaiting a decision", async () => {

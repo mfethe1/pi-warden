@@ -5,6 +5,24 @@ import type { PortableAction, PortableDecision } from "./portable-action.js";
 export type PortableApproval = (action: Readonly<PortableAction>, decision: PortableDecision) => Promise<boolean>;
 export interface PortableBlock { block: true; reason: string }
 export interface PortablePermit { block: false; action: Readonly<PortableAction> }
+export type PortableExecution<T> = PortableBlock | { block: false; result: T };
+
+/**
+ * An opt-in executor seam: the callback receives ONLY the immutable action
+ * authorized by preflight. Callers must not execute the original request or
+ * call the callback from another path. This does not install a host hook.
+ * Executor failures are propagated, never disguised as pre-execution blocks.
+ */
+export async function executePortableAction<T>(
+  action: PortableAction,
+  options: { config: ActionGuardConfig },
+  approve: PortableApproval | undefined,
+  execute: (approved: Readonly<PortableAction>) => Promise<T>,
+): Promise<PortableExecution<T>> {
+  const permit = await preflightPortableAction(action, options, approve);
+  if (permit.block) return permit;
+  return { block: false, result: await execute(permit.action) };
+}
 
 const block = (reason: string): PortableBlock => ({ block: true, reason });
 
