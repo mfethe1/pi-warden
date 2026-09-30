@@ -26,6 +26,35 @@ test("Pi binder rejects a forged or copied permit even for matching inputs", asy
   assert.equal(bindPiExecutionInput(request, permit).block, false);
 });
 
+test("mutating WeakSet.prototype.has cannot replay a consumed Pi permit", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  assert.equal(bindPiExecutionInput(request, permit).block, false);
+  const original = Object.getOwnPropertyDescriptor(WeakSet.prototype, "has");
+  Object.defineProperty(WeakSet.prototype, "has", { configurable: true, value: () => false });
+  try {
+    assert.equal(bindPiExecutionInput(request, permit).block, true);
+  } finally {
+    if (original) Object.defineProperty(WeakSet.prototype, "has", original);
+    else Reflect.deleteProperty(WeakSet.prototype, "has");
+  }
+});
+
+test("mutating Set.prototype.has cannot replay a consumed call ID", () => {
+  const ledger = new PortableCallLedger();
+  assert.equal(ledger.claim(action()), true);
+  const original = Object.getOwnPropertyDescriptor(Set.prototype, "has");
+  Object.defineProperty(Set.prototype, "has", { configurable: true, value: () => false });
+  try {
+    assert.equal(ledger.claim(action()), false);
+  } finally {
+    if (original) Object.defineProperty(Set.prototype, "has", original);
+    else Reflect.deleteProperty(Set.prototype, "has");
+  }
+});
+
 test("Pi binder rejects a matching clone rather than freezing the executing reference", async () => {
   const request = action();
   const permit = await preflightPortableAction(request, { config }, async () => true);
