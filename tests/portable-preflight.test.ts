@@ -143,6 +143,28 @@ test("mutating Object.values cannot skip freezing executing nested edits", async
   assert.throws(() => { input.edits[0]!.newText = "unapproved"; }, TypeError);
 });
 
+test("replacing prototype helpers after approval cannot leave inherited Pi options", async () => {
+  const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
+  const request: PortableAction = { ...action(), tool: "edit", input };
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  const originalGet = Object.getOwnPropertyDescriptor(Object, "getPrototypeOf");
+  const originalSet = Object.getOwnPropertyDescriptor(Object, "setPrototypeOf");
+  let result: boolean | undefined;
+  Object.defineProperty(Object, "getPrototypeOf", { configurable: true, value: (value: object) => Array.isArray(value) ? Array.prototype : null });
+  Object.defineProperty(Object, "setPrototypeOf", { configurable: true, value: <T>(value: T): T => value });
+  try {
+    result = bindPiExecutionInput(request, permit).block;
+  } finally {
+    if (originalGet) Object.defineProperty(Object, "getPrototypeOf", originalGet);
+    if (originalSet) Object.defineProperty(Object, "setPrototypeOf", originalSet);
+  }
+  assert.equal(result, false);
+  assert.equal(Object.getPrototypeOf(input), null);
+  assert.equal(Object.getPrototypeOf(input.edits[0]), null);
+});
+
 test("replacing Object.freeze after approval cannot leave Pi execution edits mutable", async () => {
   const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
   const request: PortableAction = { ...action(), tool: "edit", input };
