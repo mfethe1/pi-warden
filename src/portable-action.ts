@@ -1,5 +1,6 @@
 import type { ActionGuardConfig } from "./config.js";
 import { evaluateAction } from "./guard.js";
+import { plainData } from "./portable-plain-data.js";
 import type { Level, Verdict } from "./guard.js";
 
 /** Host-neutral, pre-execution request. Adapters must only call this before a tool executes. */
@@ -83,6 +84,9 @@ function normalize(tool: string, input: Record<string, unknown>): { tool: string
 async function evaluatePortableActionUnchecked(action: PortableAction, options: { config: ActionGuardConfig }): Promise<PortableDecision> {
   if (!action || typeof action !== "object" || Array.isArray(action)) {
     return reject("Invalid action envelope; cannot establish origin or scope");
+  }
+  if (!plainData(action)) {
+    return reject("Invalid action envelope; hidden or non-data fields cannot be inspected");
   }
   if (!Object.keys(action).every(key => ["host", "sessionId", "callId", "cwd", "task", "tool", "input"].includes(key))) {
     return reject("Unrecognized action-envelope field; cannot discard effect-bearing context");
