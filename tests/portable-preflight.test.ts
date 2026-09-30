@@ -231,6 +231,25 @@ test("inherited toJSON cannot conceal a changed Pi execution command", async () 
   }
 });
 
+test("replacing Reflect.ownKeys after approval cannot conceal a hidden Pi option", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  Object.defineProperty(request.input, "timeout", { value: 0, enumerable: false });
+  const original = Object.getOwnPropertyDescriptor(Reflect, "ownKeys");
+  const ownKeys = Reflect.ownKeys;
+  Object.defineProperty(Reflect, "ownKeys", {
+    configurable: true,
+    value: (value: object) => ownKeys(value).filter((key) => key !== "timeout"),
+  });
+  try {
+    assert.equal(bindPiExecutionInput(request, permit).block, true);
+  } finally {
+    if (original) Object.defineProperty(Reflect, "ownKeys", original);
+  }
+});
+
 test("replacing Object.create after approval cannot conceal a changed Pi command", async () => {
   const request = action();
   const permit = await preflightPortableAction(request, { config }, async () => true);
