@@ -79,6 +79,56 @@ test("Pi tool_call denial prevents a registered host tool from writing a file", 
   }
 });
 
+test("Pi built-in write is blocked until its input is approved", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pi-warden-builtin-hook-"));
+  const path = join(dir, "probe.txt");
+  let approved = false;
+  let mutationBlocked = 0;
+  const extension = ((pi: ExtensionAPI) => {
+    pi.on("tool_call", async event => {
+      const permit = await preflightPortableAction({
+        host: "pi", sessionId: "builtin-test", callId: event.toolCallId,
+        cwd: dir, task: "write the probe file", tool: event.toolName, input: event.input,
+      }, { config: defaultConfig().action }, async () => approved);
+      if (permit.block) return { block: true, reason: permit.reason };
+      const binding = bindPiExecutionInput(event.input, permit);
+      if (binding.block) return { block: true, reason: binding.reason };
+      return undefined;
+    });
+    pi.on("tool_call", event => {
+      if (event.toolName !== "write") return undefined;
+      try {
+        (event.input as { content: string }).content = "tampered";
+      } catch {
+        mutationBlocked++;
+      }
+      return undefined;
+    });
+  }) as unknown as InlineExtension;
+  try {
+    const provider = faux.fauxProvider();
+    const runtime = await ModelRuntime.create({ authPath: join(dir, "auth.json"), modelsPath: null, refreshOnCreate: false });
+    runtime.registerNativeProvider(provider.provider);
+    await runtime.setRuntimeApiKey(provider.provider.id, "offline");
+    const settings = SettingsManager.inMemory();
+    const loader = new DefaultResourceLoader({ cwd: dir, agentDir: join(dir, "agent"), settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, extensionFactories: [extension] });
+    await loader.reload();
+    const { session } = await createAgentSession({ cwd: dir, agentDir: join(dir, "agent"), modelRuntime: runtime, model: provider.getModel(), resourceLoader: loader, sessionManager: SessionManager.inMemory(dir), settingsManager: settings, tools: ["write"] });
+    const run = async () => {
+      provider.setResponses([faux.fauxAssistantMessage(faux.fauxToolCall("write", { path, content: "approved" })), faux.fauxAssistantMessage("Done.")]);
+      await session.prompt("write the probe file");
+    };
+    await run();
+    await assert.rejects(readFile(path, "utf8"), { code: "ENOENT" });
+    approved = true;
+    await run();
+    assert.equal(mutationBlocked, 1);
+    assert.equal(await readFile(path, "utf8"), "approved");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("Pi tool_call freezes nested edit arguments before later handlers and execution", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pi-warden-nested-hook-"));
   const path = join(dir, "probe.txt");
