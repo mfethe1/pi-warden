@@ -18,7 +18,9 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return false;
   seen.add(value);
-  for (const key of Reflect.ownKeys(value)) {
+  const keys = Reflect.ownKeys(value);
+  for (let index = 0; index < keys.length; index++) {
+    const key = keys[index];
     if (typeof key !== "string") return false;
     const field = Object.getOwnPropertyDescriptor(value, key);
     if (!field || !field.enumerable || !("value" in field) || !plainData(field.value, seen)) return false;
@@ -38,7 +40,11 @@ export function canonicalJson(value: unknown): string | undefined {
     }
     if (item !== null && typeof item === "object") {
       const object: Record<string, unknown> = Object.create(null);
-      for (const key of Object.keys(item)) object[key] = copy((item as Record<string, unknown>)[key]);
+      const keys = Object.keys(item);
+      for (let index = 0; index < keys.length; index++) {
+        const key = keys[index]!;
+        object[key] = copy((item as Record<string, unknown>)[key]);
+      }
       return object;
     }
     return item;
