@@ -56,6 +56,7 @@ const weakMapSet = WeakMap.prototype.set;
 const weakSetHas = WeakSet.prototype.has;
 const weakSetAdd = WeakSet.prototype.add;
 const ownValues = Object.values;
+const freeze = Object.freeze;
 
 /**
  * Pi v0.87 executes its original validated argument reference after tool_call.
@@ -97,7 +98,7 @@ function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object") {
     const children = ownValues(value);
     for (let index = 0; index < children.length; index++) deepFreeze(children[index]);
-    Object.freeze(value);
+    freeze(value);
   }
   return value;
 }
@@ -161,7 +162,7 @@ export async function preflightPortableAction(
     if (accepted !== true || action.input !== executionInput || !plainData(action) || canonicalJson(action) !== before) {
       return block("Approval declined or action changed while awaiting approval");
     }
-    const permit: PortablePermit = Object.freeze({ block: false, action: snapshot });
+    const permit: PortablePermit = freeze({ block: false, action: snapshot });
     weakMapSet.call(issuedPiPermits, permit, { action: snapshot, input: executionInput });
     return permit;
   } catch {
