@@ -34,6 +34,19 @@ returned exit 0: typecheck passed, 1,320 tests passed / 0 failed / 0 skipped,
 and build passed. Evidence:
 `/Users/mfethe/pi-warden-program/durable-outcome-ceiling-check.log`.
 
+Independent review of 8df81d5 requested changes: optimization could remove
+assertions, an outer timeout could orphan a held worker, and SQLite contexts
+did not explicitly close connections. The fixture now uses isolated Python
+(`-I`) with a fail-loud `__debug__` guard, explicit connection closing, and a
+bounded handshake wait plus kill/reap cleanup. Regression coverage runs with
+`PYTHONOPTIMIZE=2` in the environment and deliberately stalls the handshake.
+The latter returns only after worker reaping and temporary-root cleanup.
+This bounds tested stalls, not arbitrary forced termination of the fixture.
+
+Post-review canonical run passed typecheck, 1,321 tests / 0 failed / 0 skipped,
+and build; log: `/Users/mfethe/pi-warden-program/durable-outcome-review-fixes.log`.
+Re-review is required before merge.
+
 BLOCKER WARDEN-CANONICAL-SCRATCH: resolved by the test-only isolation change.
 Independent review is still required before merge. This does not establish
 production authorization or host enforcement.
