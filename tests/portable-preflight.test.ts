@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defaultConfig } from "../src/config.js";
 import { preflightPortableAction } from "../src/portable-preflight.js";
 import type { PortableApproval } from "../src/portable-preflight.js";
@@ -37,6 +40,31 @@ test("non-JSON or hidden effect-bearing fields are rejected before approval", as
   assert.equal(prompted, false);
 });
 
+test("prototype executor writes only the frozen action returned by an approved permit", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-warden-preflight-"));
+  const path = join(directory, "probe.txt");
+  try {
+    const request = { ...action(), cwd: directory, tool: "write", input: { path, content: "approved" } };
+    const refused = await preflightPortableAction(request, { config }, async () => false);
+    assert.equal(refused.block, true);
+    await assert.rejects(readFile(path, "utf8"), { code: "ENOENT" });
+
+    const permitted = await preflightPortableAction(request, { config }, async (shown) => {
+      assert.equal(shown.input.content, "approved");
+      return true;
+    });
+    assert.equal(permitted.block, false);
+    if (permitted.block) throw Error("unexpected block");
+    request.input.content = "changed after approval";
+    assert.equal(Object.isFrozen(permitted.action.input), true);
+    // This simulates a compliant executor, NOT a real Pi/Hermes/Claude hook.
+    await writeFile(permitted.action.input.path as string, permitted.action.input.content as string);
+    assert.equal(await readFile(path, "utf8"), "approved");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("approval is fresh per call and rejects changed scope while awaiting a decision", async () => {
   const first = action();
   const changed = await preflightPortableAction(first, { config }, async (shown) => {
@@ -51,7 +79,8 @@ test("approval is fresh per call and rejects changed scope while awaiting a deci
     assert.equal(shown.sessionId, "session-1");
     return approvals === 1;
   };
-  assert.equal(await preflightPortableAction(action(), { config }, approve), undefined);
-  assert.equal((await preflightPortableAction(action(), { config }, approve))?.block, true);
+  const permit = await preflightPortableAction(action(), { config }, approve);
+  assert.equal(permit.block, false);
+  assert.equal((await preflightPortableAction(action(), { config }, approve)).block, true);
   assert.equal(approvals, 2, "approval from the first call is not cached for a second call");
 });
