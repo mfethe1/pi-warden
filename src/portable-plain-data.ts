@@ -4,7 +4,8 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
   if (typeof value === "number") return Number.isFinite(value);
   if (typeof value !== "object" || seen.has(value)) return false;
   if (Array.isArray(value)) {
-    if (Reflect.ownKeys(value).length !== value.length + 1) return false;
+    if (Object.getPrototypeOf(value) !== Array.prototype
+        || Reflect.ownKeys(value).length !== value.length + 1) return false;
     seen.add(value);
     let valid = Object.keys(value).length === value.length;
     for (let index = 0; valid && index < value.length; index++) {

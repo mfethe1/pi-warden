@@ -84,6 +84,18 @@ test("hidden, accessor, and nested execution fields cannot evade direct policy e
   }
 });
 
+test("arrays with a substituted prototype cannot override edit validation", async () => {
+  const edits = [{ oldText: "a", newText: "b" }];
+  let called = false;
+  Object.setPrototypeOf(edits, Object.assign(Object.create(Array.prototype), {
+    every() { called = true; return true; },
+  }));
+  const result = await evaluatePortableAction({ ...base, host: "pi", tool: "edit", input: { path: "/work/a", edits } }, { config });
+  assert.equal(result.level, "deny");
+  assert.equal(result.intercepted, false);
+  assert.equal(called, false);
+});
+
 test("unknown action-envelope fields are denied rather than dropped", async () => {
   const result = await evaluatePortableAction({ ...base, host: "pi", tool: "bash", input: { command: "ls" }, executionMode: "background" } as never, { config });
   assert.equal(result.level, "deny");
