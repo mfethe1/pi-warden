@@ -82,8 +82,7 @@ export function bindPiExecutionInput(call: PortableAction, permit: PortablePermi
         || canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call differs from approved invocation");
     }
-    detachObjectPrototypes(input);
-    deepFreeze(input);
+    freezeDetached(input);
     if (!hasDetachedObjectPrototypes(input) || !plainData(call)
         || canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call changed during binding");
@@ -111,6 +110,16 @@ function detachObjectPrototypes(value: unknown): void {
   const children = ownValues(value);
   for (let index = 0; index < children.length; index++) detachObjectPrototypes(children[index]);
   if (!Array.isArray(value)) setPrototype(value, null);
+}
+
+function freezeDetached(value: unknown): void {
+  if (value === null || typeof value !== "object") return;
+  if (!Array.isArray(value)) setPrototype(value, null);
+  // Pin own data references before traversing: a Proxy must now return its
+  // descriptor's value, not a decoy child that leaves the real child mutable.
+  freeze(value);
+  const children = ownValues(value);
+  for (let index = 0; index < children.length; index++) freezeDetached(children[index]);
 }
 
 /** Check after freezing so Proxy traps cannot lie about a non-extensible target. */

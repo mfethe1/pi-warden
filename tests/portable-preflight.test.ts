@@ -157,6 +157,31 @@ test("Pi input binder rejects post-approval changes and freezes nested edits", a
   assert.throws(() => { input.edits[0]!.newText = "malicious"; }, TypeError);
 });
 
+test("a switching input Proxy cannot leave approved nested edits mutable", async () => {
+  const edits = [{ oldText: "before", newText: "APPROVED" }];
+  let binding = false;
+  let reads = 0;
+  const input = new Proxy({ path: "/tmp/example", edits }, {
+    get(target, key, receiver) {
+      if (key === "edits" && binding && ++reads === 3) {
+        return [{ oldText: "before", newText: "APPROVED" }];
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const request: PortableAction = { ...action(), tool: "edit", input };
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  binding = true;
+  const bound = bindPiExecutionInput(request, permit);
+  if (!bound.block) {
+    assert.equal(Object.isFrozen(edits), true);
+    assert.equal(Object.isFrozen(edits[0]), true);
+    assert.throws(() => { edits[0]!.newText = "UNAPPROVED"; }, TypeError);
+  }
+});
+
 test("mutating Object.values cannot skip freezing executing nested edits", async () => {
   const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
   const request: PortableAction = { ...action(), tool: "edit", input };
