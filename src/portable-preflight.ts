@@ -65,7 +65,8 @@ export function bindPiExecutionInput(call: PortableAction, permit: PortablePermi
     }
     detachObjectPrototypes(input);
     deepFreeze(input);
-    if (!plainData(call) || canonicalJson(call) !== canonicalJson(permit.action)) {
+    if (!hasDetachedObjectPrototypes(input) || !plainData(call)
+        || canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call changed during binding");
     }
     if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
@@ -89,6 +90,13 @@ function detachObjectPrototypes(value: unknown): void {
   if (value === null || typeof value !== "object") return;
   for (const child of Object.values(value)) detachObjectPrototypes(child);
   if (!Array.isArray(value)) Object.setPrototypeOf(value, null);
+}
+
+/** Check after freezing so Proxy traps cannot lie about a non-extensible target. */
+function hasDetachedObjectPrototypes(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return true;
+  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== null) return false;
+  return Object.values(value).every(hasDetachedObjectPrototypes);
 }
 
 /**

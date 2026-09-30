@@ -77,6 +77,18 @@ test("approved and Pi-bound inputs cannot acquire inherited optional fields", as
   }
 });
 
+test("Pi binding rejects a proxy that falsely reports successful prototype detachment", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  const proxied = { ...request, input: new Proxy({ ...request.input }, {
+    setPrototypeOf: () => true,
+  }) };
+  assert.equal(bindPiExecutionInput(proxied, permit).block, true);
+  assert.equal(Object.getPrototypeOf(proxied.input), Object.prototype);
+});
+
 test("shared ledger consumes a call ID before approval and blocks concurrent replay", async () => {
   const ledger = new PortableCallLedger();
   let promptCount = 0;
