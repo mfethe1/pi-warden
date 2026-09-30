@@ -1,5 +1,6 @@
 // Keep canonicalization stable if a later handler replaces global methods.
 const ownKeys = Object.keys;
+const allOwnKeys = Reflect.ownKeys;
 const create = Object.create;
 const stringify = JSON.stringify;
 
@@ -10,7 +11,7 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
   if (typeof value !== "object" || seen.has(value)) return false;
   if (Array.isArray(value)) {
     if (Object.getPrototypeOf(value) !== Array.prototype
-        || Reflect.ownKeys(value).length !== value.length + 1) return false;
+        || allOwnKeys(value).length !== value.length + 1) return false;
     seen.add(value);
     let valid = ownKeys(value).length === value.length;
     for (let index = 0; valid && index < value.length; index++) {
@@ -23,7 +24,7 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return false;
   seen.add(value);
-  const keys = Reflect.ownKeys(value);
+  const keys = allOwnKeys(value);
   for (let index = 0; index < keys.length; index++) {
     const key = keys[index];
     if (typeof key !== "string") return false;
