@@ -51,6 +51,18 @@ test("rejects malformed envelopes and conflicting workdirs", async () => {
   }
 });
 
+test("malformed adapter arguments fail closed rather than throwing before evaluation", async () => {
+  const action = { ...base, host: "pi", tool: "bash", input: { command: "ls" } };
+  for (const malformed of [undefined, null, { config: undefined }, { config: { tools: null } }] as const) {
+    const result = await evaluatePortableAction(action, malformed as never);
+    assert.equal(result.level, "deny");
+    assert.equal(result.intercepted, false);
+  }
+  const missingAction = await evaluatePortableAction(null as never, { config });
+  assert.equal(missingAction.level, "deny");
+  assert.equal(missingAction.intercepted, false);
+});
+
 test("maps write and edit shapes with effect-bearing fields intact", async () => {
   for (const [host, tool, input] of [
     ["pi", "write", { path: "/work/a.ts", content: "export const a = 1" }],

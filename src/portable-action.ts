@@ -81,6 +81,9 @@ function normalize(tool: string, input: Record<string, unknown>): { tool: string
 
 /** Pure policy boundary for host integrations; does not itself install hooks. */
 export async function evaluatePortableAction(action: PortableAction, options: { config: ActionGuardConfig }): Promise<PortableDecision> {
+  if (!action || typeof action !== "object" || Array.isArray(action)) {
+    return reject("Invalid action envelope; cannot establish origin or scope");
+  }
   if (![action.host, action.sessionId, action.callId, action.task, action.tool].every(nonempty)
       || !nonempty(action.cwd) || !action.cwd.startsWith("/")
       || !action.input || typeof action.input !== "object" || Array.isArray(action.input)) {
@@ -97,6 +100,9 @@ export async function evaluatePortableAction(action: PortableAction, options: { 
   }
   const mapped = normalize(action.tool, action.input);
   if (!mapped) return reject("Unknown tool or missing effect-bearing fields; no safe policy mapping");
+  if (!options?.config || typeof options.config !== "object" || !Array.isArray(options.config.tools)) {
+    return reject("Invalid policy configuration; action was not authorized");
+  }
   // Do not let a host-provided tool allowlist disable a mapped tool by accident.
   const config = { ...options.config, enabled: true, tools: [...new Set([...options.config.tools, mapped.tool])], failOpen: false };
   try {
