@@ -1,4 +1,6 @@
+import { defaultConfig } from "./config.js";
 import type { ActionGuardConfig } from "./config.js";
+import { plainData } from "./portable-plain-data.js";
 import { evaluateAction } from "./guard.js";
 import type { Level, Verdict } from "./guard.js";
 
@@ -122,9 +124,24 @@ async function evaluatePortableActionUnchecked(action: PortableAction, options: 
   }
 }
 
-/** Fail closed even when host-supplied options are malformed or throw on access. */
+/** Require every configuration field, including nested thresholds, before spreading policy. */
+function completeShape(value: unknown, template: unknown): boolean {
+  if (Array.isArray(template)) return Array.isArray(value);
+  if (template !== null && typeof template === "object") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    return Object.entries(template).every(([key, expected]) => Object.hasOwn(value, key)
+      && completeShape((value as Record<string, unknown>)[key], expected));
+  }
+  return typeof value === typeof template;
+}
+
+/** Fail closed even when host-supplied data is malformed or throws on access. */
 export async function evaluatePortableAction(action: PortableAction, options: { config: ActionGuardConfig }): Promise<PortableDecision> {
   try {
+    if (!plainData(action) || !plainData(options)
+        || !completeShape(options?.config, defaultConfig().action)) {
+      return reject("Malformed action or incomplete policy; action was not authorized");
+    }
     return await evaluatePortableActionUnchecked(action, options);
   } catch {
     return reject("Malformed action or policy; action was not authorized");

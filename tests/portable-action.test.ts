@@ -6,6 +6,43 @@ import { evaluatePortableAction } from "../src/portable-action.js";
 const base = { sessionId: "s1", callId: "c1", cwd: "/work", task: "Inspect files" } as const;
 const config = defaultConfig().action;
 
+test("direct mapper rejects hidden, inherited, sparse and accessor data", async () => {
+  let reads = 0;
+  const inputs = [
+    Object.defineProperty({ command: "ls" }, "timeout", { value: 5000 }),
+    Object.assign(Object.create({ workdir: "/other" }), { command: "ls" }),
+    { command: "ls", [Symbol("effect")]: true },
+    { get command() { reads++; return "ls"; } },
+  ];
+  for (const input of inputs) {
+    const result = await evaluatePortableAction({ ...base, host: "hermes", tool: "functions.terminal", input }, { config });
+    assert.equal(result.level, "deny");
+    assert.equal(result.intercepted, false);
+  }
+  assert.equal(reads, 0);
+  const sparse = await evaluatePortableAction({ ...base, host: "pi", tool: "edit", input: { path: "/work/a", edits: new Array(1) } }, { config });
+  assert.equal(sparse.level, "deny");
+  const nested = Object.defineProperty({ oldText: "a", newText: "b" }, "effect", { value: true });
+  const envelope = Object.defineProperty({ ...base, host: "pi", tool: "bash", input: { command: "ls" } }, "effect", { value: true });
+  const inherited = Object.assign(Object.create({ replace_all: true }), { file_path: "/work/a", old_string: "a", new_string: "b" });
+  for (const action of [envelope,
+    { ...base, host: "pi", tool: "edit", input: { path: "/work/a", edits: [nested] } },
+    { ...base, host: "claude", tool: "Edit", input: inherited }]) {
+    assert.equal((await evaluatePortableAction(action, { config })).intercepted, false);
+  }
+});
+
+test("direct mapper preserves own hard denies and rejects inherited or incomplete policy", async () => {
+  const action = { ...base, host: "hermes", tool: "functions.terminal", input: { command: "printf POLICY_BLOCK" } };
+  const denied = { ...config, commandDenyRules: [{ id: "test-deny", pattern: "^printf POLICY_BLOCK$", severity: "deny" as const }] };
+  assert.equal((await evaluatePortableAction(action, { config: denied })).level, "deny");
+  for (const malformed of [Object.create(denied), { tools: [] }]) {
+    const result = await evaluatePortableAction(action, { config: malformed });
+    assert.equal(result.level, "deny");
+    assert.equal(result.intercepted, false);
+  }
+});
+
 test("known host/tool pairs hold recursive removal", async () => {
   for (const [host, tool] of [["pi", "bash"], ["hermes", "functions.terminal"], ["claude", "Bash"]] as const) {
     const result = await evaluatePortableAction({ ...base, host, tool, input: { command: "rm -rf /work/data" } }, { config });
