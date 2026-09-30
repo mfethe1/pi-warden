@@ -2,6 +2,7 @@
 const ownKeys = Object.keys;
 const allOwnKeys = Reflect.ownKeys;
 const ownDescriptor = Object.getOwnPropertyDescriptor;
+const setPrototype = Object.setPrototypeOf;
 const create = Object.create;
 const stringify = JSON.stringify;
 
@@ -42,7 +43,7 @@ export function canonicalJson(value: unknown): string | undefined {
     if (Array.isArray(item)) {
       const array = new Array<unknown>(item.length);
       for (let index = 0; index < item.length; index++) array[index] = copy(item[index]);
-      Object.setPrototypeOf(array, null);
+      setPrototype(array, null);
       return array;
     }
     if (item !== null && typeof item === "object") {
