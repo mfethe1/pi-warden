@@ -64,6 +64,26 @@ test("rejects malformed envelopes and conflicting workdirs", async () => {
   }
 });
 
+test("hidden, accessor, and nested execution fields cannot evade direct policy evaluation", async () => {
+  const hiddenInput = { command: "ls" };
+  Object.defineProperty(hiddenInput, "background", { value: true });
+  const hiddenEnvelope = { ...base, host: "pi", tool: "bash", input: { command: "ls" } };
+  Object.defineProperty(hiddenEnvelope, "executionMode", { value: "background" });
+  const nestedEdit = { oldText: "a", newText: "b" };
+  Object.defineProperty(nestedEdit, "extra_effect", { value: "delete" });
+  const getterInput = Object.defineProperty({}, "command", { enumerable: true, get() { throw Error("getter executed"); } });
+  for (const action of [
+    { ...base, host: "pi", tool: "bash", input: hiddenInput },
+    hiddenEnvelope,
+    { ...base, host: "pi", tool: "edit", input: { path: "/work/a", edits: [nestedEdit] } },
+    { ...base, host: "pi", tool: "bash", input: getterInput },
+  ]) {
+    const result = await evaluatePortableAction(action, { config });
+    assert.equal(result.level, "deny");
+    assert.equal(result.intercepted, false);
+  }
+});
+
 test("unknown action-envelope fields are denied rather than dropped", async () => {
   const result = await evaluatePortableAction({ ...base, host: "pi", tool: "bash", input: { command: "ls" }, executionMode: "background" } as never, { config });
   assert.equal(result.level, "deny");
