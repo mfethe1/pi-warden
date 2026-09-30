@@ -122,6 +122,27 @@ test("Pi input binder rejects post-approval changes and freezes nested edits", a
   assert.throws(() => { input.edits[0]!.newText = "malicious"; }, TypeError);
 });
 
+test("mutating Object.values cannot skip freezing executing nested edits", async () => {
+  const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
+  const request: PortableAction = { ...action(), tool: "edit", input };
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  const original = Object.getOwnPropertyDescriptor(Object, "values");
+  let result: boolean | undefined;
+  Object.defineProperty(Object, "values", { configurable: true, value: () => [] });
+  try {
+    result = bindPiExecutionInput(request, permit).block;
+  } finally {
+    if (original) Object.defineProperty(Object, "values", original);
+    else Reflect.deleteProperty(Object, "values");
+  }
+  assert.equal(result, false);
+  assert.equal(Object.isFrozen(input.edits), true);
+  assert.equal(Object.isFrozen(input.edits[0]), true);
+  assert.throws(() => { input.edits[0]!.newText = "unapproved"; }, TypeError);
+});
+
 test("mutated array iterator cannot skip freezing approved or executing nested edits", async () => {
   const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
   const request: PortableAction = { ...action(), tool: "edit", input };
