@@ -26,3 +26,22 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
   seen.delete(value);
   return true;
 }
+
+/** Serialize validated own data without consulting inherited toJSON methods. */
+export function canonicalJson(value: unknown): string | undefined {
+  const copy = (item: unknown): unknown => {
+    if (Array.isArray(item)) {
+      const array = new Array<unknown>(item.length);
+      for (let index = 0; index < item.length; index++) array[index] = copy(item[index]);
+      Object.setPrototypeOf(array, null);
+      return array;
+    }
+    if (item !== null && typeof item === "object") {
+      const object: Record<string, unknown> = Object.create(null);
+      for (const key of Object.keys(item)) object[key] = copy((item as Record<string, unknown>)[key]);
+      return object;
+    }
+    return item;
+  };
+  return JSON.stringify(copy(value));
+}
