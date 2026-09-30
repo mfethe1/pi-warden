@@ -231,6 +231,27 @@ test("inherited toJSON cannot conceal a changed Pi execution command", async () 
   }
 });
 
+test("replacing JSON.stringify after approval cannot conceal a changed Pi command", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  request.input.command = "printf UNAPPROVED";
+  const original = Object.getOwnPropertyDescriptor(JSON, "stringify");
+  const stringify = JSON.stringify;
+  let blocked: boolean | undefined;
+  Object.defineProperty(JSON, "stringify", {
+    configurable: true,
+    value: (value: unknown) => stringify(value).replaceAll("printf UNAPPROVED", "printf 'ok'"),
+  });
+  try {
+    blocked = bindPiExecutionInput(request, permit).block;
+  } finally {
+    if (original) Object.defineProperty(JSON, "stringify", original);
+  }
+  assert.equal(blocked, true);
+});
+
 test("replacing Object.keys after approval cannot conceal a changed Pi command", async () => {
   const request = action();
   const permit = await preflightPortableAction(request, { config }, async () => true);
