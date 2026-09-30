@@ -5,7 +5,7 @@ import test from 'node:test';
 
 test('owned scope rejects mutation, replay, and non-JSON input', () => {
   const module = fileURLToPath(new URL('../experimental/hermes', import.meta.url));
-  const result = spawnSync('python3', ['-I', '-c', `
+  const result = spawnSync('python3', ['-I', '-B', '-c', `
 import sys
 sys.path.insert(0, sys.argv[1])
 from owned_scope import Denied, OwnedScope
