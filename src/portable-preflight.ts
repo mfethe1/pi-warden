@@ -13,10 +13,11 @@ export class PortableCallLedger {
   private readonly seen = new Set<string>();
 
   claim(action: Readonly<PortableAction>): boolean {
-    if (typeof action.host !== "string" || !action.host
-        || typeof action.sessionId !== "string" || !action.sessionId
-        || typeof action.callId !== "string" || !action.callId) return false;
-    const key = JSON.stringify([action.host, action.sessionId, action.callId]);
+    const { host, sessionId, callId } = action;
+    if (typeof host !== "string" || !host
+        || typeof sessionId !== "string" || !sessionId
+        || typeof callId !== "string" || !callId) return false;
+    const key = `${host.length}:${host}${sessionId.length}:${sessionId}${callId.length}:${callId}`;
     if (setHas.call(this.seen, key)) return false;
     setAdd.call(this.seen, key);
     return true;
