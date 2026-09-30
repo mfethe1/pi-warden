@@ -3,6 +3,17 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
+test('owned scope detached snapshot, closure race, and positive permit coverage', () => {
+  const fixture = fileURLToPath(new URL('./fixtures/hermes-owned-scope.py', import.meta.url));
+  const result = spawnSync('python3', ['-I', '-B', fixture], {
+    encoding: 'utf8', timeout: 10_000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stderr, /Ran 6 tests/);
+  assert.match(result.stderr, /\bOK\b/);
+});
+
 test('owned scope rejects mutation, replay, and non-JSON input', () => {
   const module = fileURLToPath(new URL('../experimental/hermes', import.meta.url));
   const result = spawnSync('python3', ['-I', '-B', '-c', `

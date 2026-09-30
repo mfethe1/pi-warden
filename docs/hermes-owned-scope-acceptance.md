@@ -34,5 +34,43 @@ Limits / separately owned blockers (owner: implementing Hermes):
   built-ins, shipped Pi, Claude Code, Codex and owned MCP remain separate lanes.
 - WARDEN-SCOPE-REVIEW: independent review required before merge/readiness.
 
-Next criterion: connect portable preflight to this owned handler, then durable
-reservation/outcome recording; prove host-owned ingress before broadening.
+Next criterion: obtain exact-revision review of the corrections below, then connect
+portable preflight and durable reservation/outcome recording; prove host-owned
+ingress before broadening.
+
+## PR #39 review correction checkpoint
+
+Independent review deleg_678de682 requested changes at 3b4a8c8. The implementing
+owner reproduced both reported races with repository-owned deterministic trace
+pauses: the six-case Python fixture initially failed two tests (subclass method
+invocation during serialization and consumption succeeding after scope closure).
+
+Corrections: validate and detach plain containers in one traversal; serialize only
+the detached result. Final consumption validates before atomically checking live
+scope and removing the permit. **Successful consumption commits authorization**;
+closure after that commitment does not revoke already-returned data or roll back
+an effect. No host-timeout or arbitrary malicious-plugin isolation is established.
+Concurrent edits can still produce a mixed-time plain snapshot; the exact detached
+representation is the approval/comparison input, not an atomic application snapshot.
+
+The canonical test now runs six Python cases covering both races, positive
+consumption/replay/nested detachment, decline/non-True/unavailable/throwing approval,
+unused-permit cleanup/late assent, and same-call-ID interleaved owner sessions.
+That last case tests this adapter, not the unchanged Hermes callback gate.
+The isolated unscoped dispatch now bypasses all pre-hooks and checks the executor
+error and absence of an effect directly.
+
+Verification after corrections:
+- Focused canonical: 2 passed, exit 0; Python 3.11.15 fixture: 6 passed.
+- Full canonical check: exit 0, typecheck, 1,324 passed / 0 failed / 0 skipped,
+  build. Log: `/Users/mfethe/pi-warden-program/hermes-owned-review-fixes-gate.log`.
+- Isolated real dispatch: exit 0, five acceptance checks; log:
+  `/Users/mfethe/pi-warden-program/hermes-owned-review-fixes-dispatch.log`.
+- Supplemental in-memory mutation experiment (not canonical): four mutants
+  rejected with unittest failures: ignored decline, ignored lifetime publication
+  check, caller-mutable return, and omitted unused-permit cleanup. No mutant
+  source or effects persisted.
+
+WARDEN-SCOPE-REVIEW remains open: owner implementing Hermes; unblock through
+independent exact-revision re-review. No merge, installation, or expanded coverage.
+

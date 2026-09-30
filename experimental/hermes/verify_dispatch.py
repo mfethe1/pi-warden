@@ -82,12 +82,13 @@ with tempfile.TemporaryDirectory(prefix='warden-owned-') as directory:
     assert not (root / 'mutated.txt').exists()
     print('PASS: later hook mutation denied at owned executor')
 
-    manager._hooks['pre_tool_call'] = [guard]
+    manager._hooks['pre_tool_call'] = []
     result = handle_function_call('warden_owned_write',
         {'path': str(root / 'unscoped.txt'), 'content': 'DENIED'},
         session_id='owned-session', tool_call_id='unscoped')
+    assert 'unapproved final executor input' in result, result
     assert not (root / 'unscoped.txt').exists(), result
-    print('PASS: dispatch without owner scope denied')
+    print('PASS: executor denies unscoped dispatch without pre-hook')
 
 # Deterministic scope-close/late-assent coverage, separate from host timeout.
 entered, release = Event(), Event()

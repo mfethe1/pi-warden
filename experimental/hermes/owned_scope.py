@@ -12,18 +12,18 @@ def snapshot(args):
     # Reject non-JSON objects instead of invoking user-defined copy/equality code.
     def plain(value):
         if type(value) in (str, bool, int, type(None)):
-            return
-        if type(value) is dict and all(type(key) is str for key in value):
-            for item in value.values():
-                plain(item)
-            return
+            return value
+        if type(value) is dict:
+            detached = {}
+            for key, item in value.items():
+                if type(key) is not str:
+                    raise Denied('unsupported input')
+                detached[key] = plain(item)
+            return detached
         if type(value) is list:
-            for item in value:
-                plain(item)
-            return
+            return [plain(item) for item in value]
         raise Denied('unsupported input')
-    plain(args)
-    return json.dumps(args, sort_keys=True, separators=(',', ':'))
+    return json.dumps(plain(args), sort_keys=True, separators=(',', ':'))
 
 
 class OwnedScope:
@@ -71,9 +71,16 @@ class OwnedScope:
             self._permits[identity] = encoded
 
     def consume(self, identity, args):
+        # Validation precedes the atomic commitment. Closure wins until that
+        # commitment; successful consumption cannot revoke a subsequent effect.
+        try:
+            final = snapshot(args)
+        except Exception:
+            with self._lock:
+                self._permits.pop(identity, None)
+            raise
         with self._lock:
             encoded = self._permits.pop(identity, None)
-            active = identity in self._active
-        if not active or encoded is None or encoded != snapshot(args):
-            raise Denied('unapproved final executor input')
+            if identity not in self._active or encoded is None or encoded != final:
+                raise Denied('unapproved final executor input')
         return json.loads(encoded)
