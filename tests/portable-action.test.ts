@@ -191,6 +191,19 @@ test("unknown or asynchronous effect-bearing options cannot be silently dropped"
   }
 });
 
+test("later Object.keys replacement cannot hide unsupported tool options", async () => {
+  const input = { command: "printf ok", timeout: 5000 };
+  const original = Object.keys;
+  Object.keys = value => value === input ? ["command"] : original(value);
+  try {
+    const result = await evaluatePortableAction({ ...base, host: "hermes", tool: "functions.terminal", input }, { config });
+    assert.equal(result.level, "deny");
+    assert.equal(result.intercepted, false);
+  } finally {
+    Object.keys = original;
+  }
+});
+
 test("explicit scoped working directory remains evaluable", async () => {
   const result = await evaluatePortableAction({ ...base, host: "hermes", tool: "functions.terminal", input: { command: "ls", workdir: "/work" } }, { config });
   assert.equal(result.intercepted, true);
