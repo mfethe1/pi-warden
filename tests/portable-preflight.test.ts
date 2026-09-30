@@ -89,6 +89,27 @@ test("Pi binding rejects a proxy that falsely reports successful prototype detac
   assert.equal(Object.getPrototypeOf(proxied.input), Object.prototype);
 });
 
+test("Pi binder checks nested prototype detachment despite mutated Array.prototype.every", async () => {
+  const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
+  const request: PortableAction = { ...action(), tool: "edit", input };
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  const original = Object.getOwnPropertyDescriptor(Array.prototype, "every");
+  const proxied = { ...request, input: {
+    ...input, edits: [new Proxy({ ...input.edits[0]! }, { setPrototypeOf: () => true })],
+  } };
+  Object.defineProperty(Array.prototype, "every", { configurable: true, value: () => true });
+  try {
+    assert.equal(bindPiExecutionInput(proxied, permit).block, true);
+    assert.equal(Object.getPrototypeOf(proxied.input.edits[0]), Object.prototype);
+    assert.equal(new PortableCallLedger().claim({ ...request, callId: "" }), false);
+  } finally {
+    if (original) Object.defineProperty(Array.prototype, "every", original);
+    else Reflect.deleteProperty(Array.prototype, "every");
+  }
+});
+
 test("shared ledger consumes a call ID before approval and blocks concurrent replay", async () => {
   const ledger = new PortableCallLedger();
   let promptCount = 0;
