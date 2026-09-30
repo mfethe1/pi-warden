@@ -14,6 +14,18 @@ const action = () => ({
   tool: "bash", input: { command: "printf 'ok'" },
 });
 
+test("Pi binder rejects a forged or copied permit even for matching inputs", async () => {
+  const request = action();
+  const forged = { block: false as const, action: structuredClone(request) };
+  assert.equal(bindPiExecutionInput(request, forged).block, true);
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  assert.equal(Object.isFrozen(permit), true);
+  assert.equal(bindPiExecutionInput(request, { block: false, action: permit.action }).block, true);
+  assert.equal(bindPiExecutionInput(request, permit).block, false);
+});
+
 test("Pi input binder rejects post-approval changes and freezes nested edits", async () => {
   const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
   const request: PortableAction = { ...action(), tool: "edit", input };
