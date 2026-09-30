@@ -139,6 +139,10 @@ export async function preflightPortableAction(
   let executionInput: Record<string, unknown>;
   try {
     if (!plainData(action)) return block("Action cannot be bound to approval");
+    // Pin own envelope fields before reading them; a Proxy must now obey
+    // the invariant for frozen data properties such as `input`.
+    freeze(action);
+    if (!plainData(action)) return block("Action cannot be bound to approval");
     executionInput = action.input;
     before = canonicalJson(action) ?? "";
     if (!before || canonicalJson(JSON.parse(before)) !== before) return block("Action cannot be bound to approval");

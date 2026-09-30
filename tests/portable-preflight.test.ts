@@ -30,6 +30,25 @@ test("later getPrototypeOf replacement cannot bless an inherited effect-bearing 
   }
 });
 
+test("a switching Proxy envelope cannot bind an unapproved execution input", async () => {
+  const approved = { command: "printf APPROVED" };
+  const executing = { command: "printf UNAPPROVED" };
+  const target = { ...action(), input: approved };
+  let reads = 0;
+  const call = new Proxy(target, {
+    get(object, key, receiver) {
+      if (key === "input") return [1, 3, 5].includes(++reads) ? executing : approved;
+      return Reflect.get(object, key, receiver);
+    },
+  });
+  const permit = await preflightPortableAction(call, { config }, async shown => {
+    assert.equal(shown.input.command, "printf APPROVED");
+    return true;
+  });
+  assert.equal(permit.block, true);
+  assert.equal(executing.command, "printf UNAPPROVED");
+});
+
 test("Pi binder rejects a forged or copied permit even for matching inputs", async () => {
   const request = action();
   const forged = { block: false as const, action: structuredClone(request) };
