@@ -1,6 +1,7 @@
 // Keep canonicalization stable if a later handler replaces global methods.
 const ownKeys = Object.keys;
 const allOwnKeys = Reflect.ownKeys;
+const ownDescriptor = Object.getOwnPropertyDescriptor;
 const create = Object.create;
 const stringify = JSON.stringify;
 
@@ -15,7 +16,7 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
     seen.add(value);
     let valid = ownKeys(value).length === value.length;
     for (let index = 0; valid && index < value.length; index++) {
-      const field = Object.getOwnPropertyDescriptor(value, String(index));
+      const field = ownDescriptor(value, String(index));
       valid = !!field?.enumerable && "value" in field && plainData(field.value, seen);
     }
     seen.delete(value);
@@ -28,7 +29,7 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
   for (let index = 0; index < keys.length; index++) {
     const key = keys[index];
     if (typeof key !== "string") return false;
-    const field = Object.getOwnPropertyDescriptor(value, key);
+    const field = ownDescriptor(value, key);
     if (!field || !field.enumerable || !("value" in field) || !plainData(field.value, seen)) return false;
   }
   seen.delete(value);

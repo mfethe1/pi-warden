@@ -231,6 +231,35 @@ test("inherited toJSON cannot conceal a changed Pi execution command", async () 
   }
 });
 
+test("replacing getOwnPropertyDescriptor cannot smuggle a changing command getter into Pi execution", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  let executed = false;
+  Object.defineProperty(request.input, "command", {
+    configurable: true,
+    enumerable: true,
+    get: () => executed ? "printf UNAPPROVED" : "printf 'ok'",
+  });
+  const original = Object.getOwnPropertyDescriptor(Object, "getOwnPropertyDescriptor");
+  const descriptor = Object.getOwnPropertyDescriptor;
+  Object.defineProperty(Object, "getOwnPropertyDescriptor", {
+    configurable: true,
+    value: (target: object, key: PropertyKey) =>
+      target === request.input && key === "command"
+        ? { configurable: true, enumerable: true, writable: true, value: "printf 'ok'" }
+        : descriptor(target, key),
+  });
+  try {
+    const result = bindPiExecutionInput(request, permit);
+    executed = true;
+    assert.equal(result.block, true);
+  } finally {
+    if (original) Object.defineProperty(Object, "getOwnPropertyDescriptor", original);
+  }
+});
+
 test("replacing Reflect.ownKeys after approval cannot conceal a hidden Pi option", async () => {
   const request = action();
   const permit = await preflightPortableAction(request, { config }, async () => true);
