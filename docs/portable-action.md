@@ -1,0 +1,7 @@
+# Portable action boundary (experimental)
+
+`src/portable-action.ts` is a host-neutral **pre-execution policy core**, not an installed Hermes, Claude, ChatGPT, or Pi integration. Adapters must capture the actual tool invocation before execution, pass the current user's task (not agent text or retrieved content), and enforce `deny` by blocking and `confirm` by obtaining fresh, action-scoped user approval. A host that cannot intercept before execution must not claim enforcement. No approval persistence or cross-session carryover is provided here.
+
+The core maps known shell (`bash`, `Bash`, `terminal`, `functions.terminal`), write and simple edit shapes to the existing offline Pi guard. It fails closed for unknown tools, arbitrary code execution, and patch-format bulk edits: treating these as shell text or read-only actions would be misleading. It forces a hold for recursive removal even where the Pi default would only warn. It neither connects a judge nor transmits data. The `verdict` object contains a summary and is intended for local inspection, not automatic telemetry.
+
+Next before deployment: implement and test each host's actual hook contract, prove the hook can block a real side effect, map all effect-bearing tools without losing arguments, bind approvals to the originating request and action, and calibrate false holds against real trace data. Do not install this prototype as a blanket extension or treat the named hosts in tests as working integrations.
