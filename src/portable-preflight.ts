@@ -17,8 +17,8 @@ export class PortableCallLedger {
         || typeof action.sessionId !== "string" || !action.sessionId
         || typeof action.callId !== "string" || !action.callId) return false;
     const key = JSON.stringify([action.host, action.sessionId, action.callId]);
-    if (this.seen.has(key)) return false;
-    this.seen.add(key);
+    if (setHas.call(this.seen, key)) return false;
+    setAdd.call(this.seen, key);
     return true;
   }
 }
@@ -47,6 +47,13 @@ export async function executePortableAction<T>(
 }
 
 const block = (reason: string): PortableBlock => ({ block: true, reason });
+// Capture collection operations before later same-process prototype mutation.
+const setHas = Set.prototype.has;
+const setAdd = Set.prototype.add;
+const weakMapGet = WeakMap.prototype.get;
+const weakMapSet = WeakMap.prototype.set;
+const weakSetHas = WeakSet.prototype.has;
+const weakSetAdd = WeakSet.prototype.add;
 
 /**
  * Pi v0.87 executes its original validated argument reference after tool_call.
@@ -61,9 +68,9 @@ const boundPiPermits = new WeakSet<PortablePermit>();
 
 export function bindPiExecutionInput(call: PortableAction, permit: PortablePermit): PortableBlock | { block: false } {
   try {
-    const issued = issuedPiPermits.get(permit);
+    const issued = weakMapGet.call(issuedPiPermits, permit);
     if (!issued || issued.action !== permit.action) return block("Pi permit was not issued by preflight");
-    if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
+    if (weakSetHas.call(boundPiPermits, permit)) return block("Pi permit has already been bound");
     const { input } = call;
     if (input !== issued.input) return block("Pi execution input is not the approved reference");
     if (permit.block || permit.action.host !== "pi" || !plainData(call)
@@ -76,8 +83,8 @@ export function bindPiExecutionInput(call: PortableAction, permit: PortablePermi
         || canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call changed during binding");
     }
-    if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
-    boundPiPermits.add(permit);
+    if (weakSetHas.call(boundPiPermits, permit)) return block("Pi permit has already been bound");
+    weakSetAdd.call(boundPiPermits, permit);
     return { block: false };
   } catch {
     return block("Pi execution input could not be bound to approval");
@@ -153,7 +160,7 @@ export async function preflightPortableAction(
       return block("Approval declined or action changed while awaiting approval");
     }
     const permit: PortablePermit = Object.freeze({ block: false, action: snapshot });
-    issuedPiPermits.set(permit, { action: snapshot, input: executionInput });
+    weakMapSet.call(issuedPiPermits, permit, { action: snapshot, input: executionInput });
     return permit;
   } catch {
     return block("Approval failed; action was not authorized");
