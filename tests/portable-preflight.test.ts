@@ -57,6 +57,26 @@ test("inherited toJSON cannot conceal a changed Pi execution command", async () 
   }
 });
 
+test("approved and Pi-bound inputs cannot acquire inherited optional fields", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  assert.equal(bindPiExecutionInput(request, permit).block, false);
+  const prototype = Object.prototype as Record<string, unknown>;
+  const before = Object.getOwnPropertyDescriptor(prototype, "workdir");
+  Object.defineProperty(prototype, "workdir", { configurable: true, value: "/outside" });
+  try {
+    assert.equal((permit.action.input as Record<string, unknown>).workdir, undefined);
+    assert.equal((request.input as Record<string, unknown>).workdir, undefined);
+    assert.equal(Object.getPrototypeOf(permit.action.input), null);
+    assert.equal(Object.getPrototypeOf(request.input), null);
+  } finally {
+    if (before) Object.defineProperty(prototype, "workdir", before);
+    else Reflect.deleteProperty(prototype, "workdir");
+  }
+});
+
 test("shared ledger consumes a call ID before approval and blocks concurrent replay", async () => {
   const ledger = new PortableCallLedger();
   let promptCount = 0;
