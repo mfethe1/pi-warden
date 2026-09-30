@@ -17,6 +17,8 @@ for (const name of Object.keys(process.env)) {
   if ((name.startsWith("PI_") && !KEPT.has(name)) || JUDGE_KEYS.includes(name)) delete process.env[name];
 }
 
+// Temporary fixtures must not discover an unrelated repository above the scratch root.
+process.env.GIT_CEILING_DIRECTORIES = tmpdir();
 const agentDir = mkdtempSync(join(tmpdir(), "pi-warden-test-agent-"));
 process.env.PI_CODING_AGENT_DIR = agentDir;
 process.on("exit", () => rmSync(agentDir, { recursive: true, force: true }));
