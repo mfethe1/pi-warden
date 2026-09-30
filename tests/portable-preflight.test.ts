@@ -26,6 +26,28 @@ test("Pi binder rejects a forged or copied permit even for matching inputs", asy
   assert.equal(bindPiExecutionInput(request, permit).block, false);
 });
 
+test("Pi binder rejects a matching clone rather than freezing the executing reference", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  const clone = structuredClone(request.input);
+  assert.equal(bindPiExecutionInput({ ...request, input: clone }, permit).block, true);
+  assert.equal(Object.isFrozen(request.input), false);
+  assert.equal(bindPiExecutionInput(request, permit).block, false);
+  assert.equal(Object.isFrozen(request.input), true);
+});
+
+test("Pi preflight rejects replacing the input reference while approval waits", async () => {
+  const request = action();
+  const original = request.input;
+  const permit = await preflightPortableAction(request, { config }, async () => {
+    request.input = structuredClone(original);
+    return true;
+  });
+  assert.equal(permit.block, true);
+});
+
 test("Pi input binder rejects post-approval changes and freezes nested edits", async () => {
   const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
   const request: PortableAction = { ...action(), tool: "edit", input };
