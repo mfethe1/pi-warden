@@ -9,7 +9,7 @@ import { Type } from "typebox";
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, InlineExtension } from "@earendil-works/pi-coding-agent";
 import { defaultConfig } from "../src/config.js";
-import { preflightPortableAction } from "../src/portable-preflight.js";
+import { bindPiExecutionInput, preflightPortableAction } from "../src/portable-preflight.js";
 
 // Offline Pi v0.87 host dispatch: faux model -> tool_call hook -> registered real file-writing tool.
 const agentRoot = fileURLToPath(new URL("..", import.meta.resolve("@earendil-works/pi-coding-agent")));
@@ -38,9 +38,10 @@ test("Pi tool_call denial prevents a registered host tool from writing a file", 
         cwd: dir, task: "write the probe file", tool: event.toolName, input: event.input,
       }, { config: defaultConfig().action }, async () => approved);
       if (result.block) return { block: true, reason: result.reason };
-      // Pi has no replacement-input return value. Freeze the actual validated args
-      // referenced by its core, rather than treating a detached permit as binding.
-      Object.freeze(event.input);
+      // Pi has no replacement-input return value. Bind its actual validated args
+      // to the approved snapshot and freeze recursively before later handlers.
+      const binding = bindPiExecutionInput(event.input, result);
+      if (binding.block) return { block: true, reason: binding.reason };
       return undefined;
     });
     pi.on("tool_call", (event) => {

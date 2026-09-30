@@ -5,13 +5,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config.js";
 import type { PortableAction } from "../src/portable-action.js";
-import { executePortableAction, PortableCallLedger, preflightPortableAction } from "../src/portable-preflight.js";
+import { bindPiExecutionInput, executePortableAction, PortableCallLedger, preflightPortableAction } from "../src/portable-preflight.js";
 import type { PortableApproval } from "../src/portable-preflight.js";
 
 const config = defaultConfig().action;
 const action = () => ({
   host: "pi", sessionId: "session-1", callId: "call-1", cwd: "/work", task: "Inspect files",
   tool: "bash", input: { command: "printf 'ok'" },
+});
+
+test("Pi input binder rejects post-approval changes and freezes nested edits", async () => {
+  const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
+  const request: PortableAction = { ...action(), tool: "edit", input };
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  const changed = structuredClone(input);
+  changed.edits[0]!.newText = "malicious";
+  assert.equal(bindPiExecutionInput(changed, permit).block, true);
+  assert.equal(bindPiExecutionInput(input, permit).block, false);
+  assert.equal(Object.isFrozen(input), true);
+  assert.equal(Object.isFrozen(input.edits), true);
+  assert.equal(Object.isFrozen(input.edits[0]), true);
+  assert.throws(() => { input.edits[0]!.newText = "malicious"; }, TypeError);
 });
 
 test("shared ledger consumes a call ID before approval and blocks concurrent replay", async () => {

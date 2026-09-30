@@ -45,6 +45,27 @@ export async function executePortableAction<T>(
 
 const block = (reason: string): PortableBlock => ({ block: true, reason });
 
+/**
+ * Pi v0.87 executes its original validated argument reference after tool_call.
+ * Bind that reference to a preflight permit; deny if it changed since approval.
+ * This is a host-specific candidate, not a general replacement-input hook.
+ */
+export function bindPiExecutionInput(input: Record<string, unknown>, permit: PortablePermit): PortableBlock | { block: false } {
+  try {
+    if (permit.block || permit.action.host !== "pi" || !plainData(input)
+        || JSON.stringify(input) !== JSON.stringify(permit.action.input)) {
+      return block("Pi execution input differs from approved invocation");
+    }
+    deepFreeze(input);
+    if (JSON.stringify(input) !== JSON.stringify(permit.action.input)) {
+      return block("Pi execution input changed during binding");
+    }
+    return { block: false };
+  } catch {
+    return block("Pi execution input could not be bound to approval");
+  }
+}
+
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object") {
     for (const child of Object.values(value)) deepFreeze(child);
