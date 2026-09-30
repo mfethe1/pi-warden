@@ -1,3 +1,7 @@
+// Keep validation and canonicalization on the same own-key primitive even if a
+// later handler replaces Object.keys after approval.
+const ownKeys = Object.keys;
+
 /** Reject getters, hidden keys, non-JSON values, prototypes, and cycles before policy evaluation. */
 export function plainData(value: unknown, seen = new WeakSet<object>()): boolean {
   if (value === null || typeof value === "string" || typeof value === "boolean") return true;
@@ -7,7 +11,7 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
     if (Object.getPrototypeOf(value) !== Array.prototype
         || Reflect.ownKeys(value).length !== value.length + 1) return false;
     seen.add(value);
-    let valid = Object.keys(value).length === value.length;
+    let valid = ownKeys(value).length === value.length;
     for (let index = 0; valid && index < value.length; index++) {
       const field = Object.getOwnPropertyDescriptor(value, String(index));
       valid = !!field?.enumerable && "value" in field && plainData(field.value, seen);
@@ -40,7 +44,7 @@ export function canonicalJson(value: unknown): string | undefined {
     }
     if (item !== null && typeof item === "object") {
       const object: Record<string, unknown> = Object.create(null);
-      const keys = Object.keys(item);
+      const keys = ownKeys(item);
       for (let index = 0; index < keys.length; index++) {
         const key = keys[index]!;
         object[key] = copy((item as Record<string, unknown>)[key]);
