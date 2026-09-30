@@ -63,8 +63,9 @@ export function bindPiExecutionInput(call: PortableAction, permit: PortablePermi
         || canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call differs from approved invocation");
     }
+    detachObjectPrototypes(input);
     deepFreeze(input);
-    if (canonicalJson(call) !== canonicalJson(permit.action)) {
+    if (!plainData(call) || canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call changed during binding");
     }
     if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
@@ -83,6 +84,13 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+/** Keep own arguments while removing mutable Object.prototype lookups. */
+function detachObjectPrototypes(value: unknown): void {
+  if (value === null || typeof value !== "object") return;
+  for (const child of Object.values(value)) detachObjectPrototypes(child);
+  if (!Array.isArray(value)) Object.setPrototypeOf(value, null);
+}
+
 /**
  * Prototype adapter seam: return a block or a permit containing the exact
  * frozen invocation approved. The host MUST execute the permit's action, not
@@ -99,7 +107,9 @@ export async function preflightPortableAction(
     if (!plainData(action)) return block("Action cannot be bound to approval");
     before = canonicalJson(action) ?? "";
     if (!before || canonicalJson(JSON.parse(before)) !== before) return block("Action cannot be bound to approval");
-    snapshot = deepFreeze(JSON.parse(before) as PortableAction);
+    snapshot = JSON.parse(before) as PortableAction;
+    detachObjectPrototypes(snapshot);
+    deepFreeze(snapshot);
   } catch {
     return block("Action cannot be bound to approval");
   }
