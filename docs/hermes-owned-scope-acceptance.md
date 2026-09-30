@@ -73,4 +73,3 @@ Verification after corrections:
 
 WARDEN-SCOPE-REVIEW remains open: owner implementing Hermes; unblock through
 independent exact-revision re-review. No merge, installation, or expanded coverage.
-
