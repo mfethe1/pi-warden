@@ -55,15 +55,17 @@ const block = (reason: string): PortableBlock => ({ block: true, reason });
  * call identity from the authentic host event, not untrusted model arguments.
  */
 /** In-process provenance only; a caller with arbitrary code execution can still supply its own approver. */
-const issuedPiPermits = new WeakMap<PortablePermit, Readonly<PortableAction>>();
+const issuedPiPermits = new WeakMap<PortablePermit, { action: Readonly<PortableAction>; input: Record<string, unknown> }>();
 /** Consume the same issued permit object once; not a durable approval token. */
 const boundPiPermits = new WeakSet<PortablePermit>();
 
 export function bindPiExecutionInput(call: PortableAction, permit: PortablePermit): PortableBlock | { block: false } {
   try {
-    if (issuedPiPermits.get(permit) !== permit.action) return block("Pi permit was not issued by preflight");
+    const issued = issuedPiPermits.get(permit);
+    if (!issued || issued.action !== permit.action) return block("Pi permit was not issued by preflight");
     if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
     const { input } = call;
+    if (input !== issued.input) return block("Pi execution input is not the approved reference");
     if (permit.block || permit.action.host !== "pi" || !plainData(call)
         || canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call differs from approved invocation");
@@ -122,8 +124,10 @@ export async function preflightPortableAction(
 ): Promise<PortableBlock | PortablePermit> {
   let before: string;
   let snapshot: PortableAction;
+  let executionInput: Record<string, unknown>;
   try {
     if (!plainData(action)) return block("Action cannot be bound to approval");
+    executionInput = action.input;
     before = canonicalJson(action) ?? "";
     if (!before || canonicalJson(JSON.parse(before)) !== before) return block("Action cannot be bound to approval");
     snapshot = JSON.parse(before) as PortableAction;
@@ -145,11 +149,11 @@ export async function preflightPortableAction(
     }
     // Both the policy and the approver inspect the same immutable invocation.
     const accepted = await approve(snapshot, decision);
-    if (accepted !== true || !plainData(action) || canonicalJson(action) !== before) {
+    if (accepted !== true || action.input !== executionInput || !plainData(action) || canonicalJson(action) !== before) {
       return block("Approval declined or action changed while awaiting approval");
     }
     const permit: PortablePermit = Object.freeze({ block: false, action: snapshot });
-    issuedPiPermits.set(permit, snapshot);
+    issuedPiPermits.set(permit, { action: snapshot, input: executionInput });
     return permit;
   } catch {
     return block("Approval failed; action was not authorized");
