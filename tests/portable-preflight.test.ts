@@ -42,6 +42,31 @@ test("mutating WeakSet.prototype.has cannot replay a consumed Pi permit", async 
   }
 });
 
+test("mutating Array.prototype.toJSON cannot replay a consumed call ID", () => {
+  const ledger = new PortableCallLedger();
+  const request = action();
+  assert.equal(ledger.claim(request), true);
+  const original = Object.getOwnPropertyDescriptor(Array.prototype, "toJSON");
+  let counter = 0;
+  Object.defineProperty(Array.prototype, "toJSON", { configurable: true, value: () => ++counter });
+  try {
+    assert.equal(ledger.claim(request), false);
+  } finally {
+    if (original) Object.defineProperty(Array.prototype, "toJSON", original);
+    else Reflect.deleteProperty(Array.prototype, "toJSON");
+  }
+});
+
+test("call-ID key is unambiguous when identity fields contain separators", () => {
+  const ledger = new PortableCallLedger();
+  const first = { ...action(), host: "a", sessionId: "b:c", callId: "d" };
+  const second = { ...first, host: "a:b", sessionId: "c" };
+  assert.equal(ledger.claim(first), true);
+  assert.equal(ledger.claim(second), true);
+  assert.equal(ledger.claim(first), false);
+  assert.equal(ledger.claim(second), false);
+});
+
 test("mutating Set.prototype.has cannot replay a consumed call ID", () => {
   const ledger = new PortableCallLedger();
   assert.equal(ledger.claim(action()), true);
