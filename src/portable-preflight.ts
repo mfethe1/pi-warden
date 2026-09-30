@@ -7,6 +7,25 @@ export interface PortableBlock { block: true; reason: string }
 export interface PortablePermit { block: false; action: Readonly<PortableAction> }
 export type PortableExecution<T> = PortableBlock | { block: false; result: T };
 
+/** Per-session, in-memory single-use call IDs. Share one ledger across all hooks. */
+export class PortableCallLedger {
+  private readonly seen = new Set<string>();
+
+  claim(action: Readonly<PortableAction>): boolean {
+    if (![action.host, action.sessionId, action.callId].every(value => typeof value === "string" && value.length > 0)) return false;
+    const key = JSON.stringify([action.host, action.sessionId, action.callId]);
+    if (this.seen.has(key)) return false;
+    this.seen.add(key);
+    return true;
+  }
+}
+
+export interface PortablePreflightOptions {
+  config: ActionGuardConfig;
+  /** Optional replay guard; requires a shared instance for the session lifetime. */
+  ledger?: PortableCallLedger;
+}
+
 /**
  * An opt-in executor seam: the callback receives ONLY the immutable action
  * authorized by preflight. Callers must not execute the original request or
@@ -15,7 +34,7 @@ export type PortableExecution<T> = PortableBlock | { block: false; result: T };
  */
 export async function executePortableAction<T>(
   action: PortableAction,
-  options: { config: ActionGuardConfig },
+  options: PortablePreflightOptions,
   approve: PortableApproval | undefined,
   execute: (approved: Readonly<PortableAction>) => Promise<T>,
 ): Promise<PortableExecution<T>> {
@@ -69,7 +88,7 @@ function plainData(value: unknown, seen = new WeakSet<object>()): boolean {
  */
 export async function preflightPortableAction(
   action: PortableAction,
-  options: { config: ActionGuardConfig },
+  options: PortablePreflightOptions,
   approve?: PortableApproval,
 ): Promise<PortableBlock | PortablePermit> {
   let before: string;
@@ -88,6 +107,11 @@ export async function preflightPortableAction(
     return block("No mandatory interactive approval available");
   }
   try {
+    // Claim before the first await so concurrent invocations cannot reuse the ID.
+    // A declined/failed request is still consumed; retry with a new host call ID.
+    if (options.ledger && !options.ledger.claim(snapshot)) {
+      return block("Call ID already used or invalid");
+    }
     // Both the policy and the approver inspect the same immutable invocation.
     const accepted = await approve(snapshot, decision);
     if (accepted !== true || !plainData(action) || JSON.stringify(action) !== before) {

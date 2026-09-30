@@ -5,13 +5,45 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultConfig } from "../src/config.js";
 import type { PortableAction } from "../src/portable-action.js";
-import { executePortableAction, preflightPortableAction } from "../src/portable-preflight.js";
+import { executePortableAction, PortableCallLedger, preflightPortableAction } from "../src/portable-preflight.js";
 import type { PortableApproval } from "../src/portable-preflight.js";
 
 const config = defaultConfig().action;
 const action = () => ({
   host: "pi", sessionId: "session-1", callId: "call-1", cwd: "/work", task: "Inspect files",
   tool: "bash", input: { command: "printf 'ok'" },
+});
+
+test("shared ledger consumes a call ID before approval and blocks concurrent replay", async () => {
+  const ledger = new PortableCallLedger();
+  let promptCount = 0;
+  let release: (value: boolean) => void = () => { throw Error("approval did not start"); };
+  const pendingApproval = new Promise<boolean>(resolve => { release = resolve; });
+  const first = preflightPortableAction(action(), { config, ledger }, async () => {
+    promptCount++;
+    return pendingApproval;
+  });
+  // Wait for the first approval prompt to start without assuming policy timing.
+  for (let turn = 0; promptCount === 0 && turn < 100; turn++) await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(promptCount, 1);
+  const replay = await preflightPortableAction(action(), { config, ledger }, async () => {
+    promptCount++;
+    return true;
+  });
+  assert.equal(replay.block, true);
+  assert.match(replay.reason, /Call ID already used/);
+  assert.equal(promptCount, 1);
+  release(true);
+  assert.equal((await first).block, false);
+  assert.equal((await preflightPortableAction(action(), { config, ledger }, async () => true)).block, true);
+  assert.equal((await preflightPortableAction({ ...action(), callId: "call-2" }, { config, ledger }, async () => true)).block, false);
+});
+
+test("ledger consumes declined calls and keeps host/session namespaces distinct", async () => {
+  const ledger = new PortableCallLedger();
+  assert.equal((await preflightPortableAction(action(), { config, ledger }, async () => false)).block, true);
+  assert.equal((await preflightPortableAction(action(), { config, ledger }, async () => true)).block, true);
+  assert.equal((await preflightPortableAction({ ...action(), sessionId: "session-2" }, { config, ledger }, async () => true)).block, false);
 });
 
 test("preflight blocks denied, declined, headless, and failed approvals before a side effect", async () => {
