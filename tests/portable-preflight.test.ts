@@ -27,6 +27,7 @@ test("Pi input binder rejects post-approval changes and freezes nested edits", a
     assert.equal(bindPiExecutionInput({ ...request, [field]: `${request[field]}-other` }, permit).block, true, field);
   }
   assert.equal(bindPiExecutionInput(request, permit).block, false);
+  assert.equal(bindPiExecutionInput({ ...request, input: structuredClone(input) }, permit).block, true);
   assert.equal(Object.isFrozen(input), true);
   assert.equal(Object.isFrozen(input.edits), true);
   assert.equal(Object.isFrozen(input.edits[0]), true);

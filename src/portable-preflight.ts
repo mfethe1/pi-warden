@@ -52,8 +52,12 @@ const block = (reason: string): PortableBlock => ({ block: true, reason });
  * the permit; deny if either changed since approval. The adapter must derive
  * call identity from the authentic host event, not untrusted model arguments.
  */
+/** Consume the same permit object once; not a durable or unforgeable approval token. */
+const boundPiPermits = new WeakSet<PortablePermit>();
+
 export function bindPiExecutionInput(call: PortableAction, permit: PortablePermit): PortableBlock | { block: false } {
   try {
+    if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
     const { input } = call;
     if (permit.block || permit.action.host !== "pi" || !plainData(call)
         || JSON.stringify(call) !== JSON.stringify(permit.action)) {
@@ -63,6 +67,8 @@ export function bindPiExecutionInput(call: PortableAction, permit: PortablePermi
     if (JSON.stringify(call) !== JSON.stringify(permit.action)) {
       return block("Pi execution call changed during binding");
     }
+    if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
+    boundPiPermits.add(permit);
     return { block: false };
   } catch {
     return block("Pi execution input could not be bound to approval");
