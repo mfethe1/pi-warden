@@ -57,6 +57,8 @@ const weakSetHas = WeakSet.prototype.has;
 const weakSetAdd = WeakSet.prototype.add;
 const ownValues = Object.values;
 const freeze = Object.freeze;
+const getPrototype = Object.getPrototypeOf;
+const setPrototype = Object.setPrototypeOf;
 
 /**
  * Pi v0.87 executes its original validated argument reference after tool_call.
@@ -108,13 +110,13 @@ function detachObjectPrototypes(value: unknown): void {
   if (value === null || typeof value !== "object") return;
   const children = ownValues(value);
   for (let index = 0; index < children.length; index++) detachObjectPrototypes(children[index]);
-  if (!Array.isArray(value)) Object.setPrototypeOf(value, null);
+  if (!Array.isArray(value)) setPrototype(value, null);
 }
 
 /** Check after freezing so Proxy traps cannot lie about a non-extensible target. */
 function hasDetachedObjectPrototypes(value: unknown): boolean {
   if (value === null || typeof value !== "object") return true;
-  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== null) return false;
+  if (!Array.isArray(value) && getPrototype(value) !== null) return false;
   const children = ownValues(value);
   for (let index = 0; index < children.length; index++) {
     if (!hasDetachedObjectPrototypes(children[index])) return false;
