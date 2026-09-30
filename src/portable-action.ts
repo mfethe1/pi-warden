@@ -24,11 +24,24 @@ export interface PortableDecision {
 const reject = (reason: string): PortableDecision => ({ level: "deny", intercepted: false, reason });
 
 /** Tool names are host-specific. ChatGPT integrations need a verified hook contract first. */
-const HOST_TOOLS: Record<string, readonly string[]> = {
+const HOST_TOOLS: Readonly<Record<string, readonly string[]>> = {
   pi: ["bash", "write", "edit"],
   hermes: ["functions.terminal", "functions.write_file", "functions.patch"],
   claude: ["Bash", "Write", "Edit"],
 };
+
+const TOOL_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  bash: ["command"], Bash: ["command", "timeout"], "functions.terminal": ["command", "timeout", "workdir"],
+  write: ["path", "content"], Write: ["file_path", "content"], "functions.write_file": ["path", "content"],
+  edit: ["path", "edits"], Edit: ["file_path", "old_string", "new_string", "replace_all"],
+  "functions.patch": ["mode", "path", "old_string", "new_string", "replace_all"],
+};
+
+/** Reject unexamined fields: a host may add an effectful option in a later release. */
+function knownFields(tool: string, input: Record<string, unknown>): boolean {
+  const permitted = TOOL_FIELDS[tool];
+  return !!permitted && Object.keys(input).every(key => permitted.includes(key));
+}
 
 function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
@@ -69,10 +82,13 @@ export async function evaluatePortableAction(action: PortableAction, options: { 
       || !action.input || typeof action.input !== "object" || Array.isArray(action.input)) {
     return reject("Invalid action envelope; cannot establish origin or scope");
   }
-  if (!HOST_TOOLS[action.host]?.includes(action.tool)) {
+  if (!Object.hasOwn(HOST_TOOLS, action.host) || !HOST_TOOLS[action.host]?.includes(action.tool)) {
     return reject("Unverified host/tool contract; this adapter cannot promise pre-execution coverage");
   }
-  if (typeof action.input.workdir === "string" && action.input.workdir !== action.cwd) {
+  if (!knownFields(action.tool, action.input)) {
+    return reject("Unrecognized tool option; cannot discard a potentially effect-bearing field");
+  }
+  if (Object.hasOwn(action.input, "workdir") && action.input.workdir !== action.cwd) {
     return reject("Action working directory differs from policy working directory");
   }
   const mapped = normalize(action.tool, action.input);

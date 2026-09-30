@@ -20,6 +20,8 @@ test("unknown hosts, cross-host tool aliases and arbitrary code fail closed", as
     ["hermes", "Bash", { command: "rm -rf /" }],
     ["hermes", "functions.execute_code", { code: "import shutil; shutil.rmtree('/work')" }],
     ["hermes", "functions.patch", { mode: "patch", patch: "*** Begin Patch" }],
+    ["__proto__", "Bash", { command: "ls" }],
+    ["constructor", "Bash", { command: "ls" }],
   ] as const) {
     const result = await evaluatePortableAction({ ...base, host, tool, input }, { config });
     assert.equal(result.level, "deny", `${host}/${tool}`);
@@ -51,6 +53,26 @@ test("maps write and edit shapes with effect-bearing fields intact", async () =>
     assert.notEqual(result.level, "deny", `${host}/${tool}`);
     assert.equal(result.verdict?.summary.path, "a.ts");
   }
+});
+
+test("unknown or asynchronous effect-bearing options cannot be silently dropped", async () => {
+  for (const [host, tool, input] of [
+    ["hermes", "functions.terminal", { command: "ls", background: true }],
+    ["hermes", "functions.terminal", { command: "ls", workdir: null }],
+    ["claude", "Bash", { command: "ls", run_in_background: true }],
+    ["pi", "bash", { command: "ls", env: { SAFE: "1" } }],
+    ["hermes", "functions.write_file", { path: "/work/a", content: "x", chmod: "777" }],
+    ["claude", "Edit", { file_path: "/work/a", old_string: "a", new_string: "b", replace_all: true, extra: "ignored" }],
+  ] as const) {
+    const result = await evaluatePortableAction({ ...base, host, tool, input }, { config });
+    assert.equal(result.level, "deny", `${host}/${tool}`);
+    assert.equal(result.intercepted, false);
+  }
+});
+
+test("explicit scoped working directory remains evaluable", async () => {
+  const result = await evaluatePortableAction({ ...base, host: "hermes", tool: "functions.terminal", input: { command: "ls", workdir: "/work" } }, { config });
+  assert.equal(result.intercepted, true);
 });
 
 test("missing content, bulk edits and incomplete commands fail closed", async () => {
