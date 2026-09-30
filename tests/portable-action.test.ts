@@ -96,6 +96,29 @@ test("arrays with a substituted prototype cannot override edit validation", asyn
   assert.equal(called, false);
 });
 
+test("mutated Array.prototype validation helpers cannot approve unexamined fields", async () => {
+  const oldEvery = Object.getOwnPropertyDescriptor(Array.prototype, "every");
+  const oldIncludes = Object.getOwnPropertyDescriptor(Array.prototype, "includes");
+  Object.defineProperty(Array.prototype, "every", { configurable: true, value: () => true });
+  Object.defineProperty(Array.prototype, "includes", { configurable: true, value: () => true });
+  try {
+    for (const action of [
+      { ...base, host: "pi", tool: "bash", input: { command: "ls", unexamined: "effect" } },
+      { ...base, host: "pi", tool: "edit", input: { path: "/work/a", edits: [{ oldText: "a", newText: "b", unexamined: "effect" }] } },
+      { ...base, host: "pi", tool: "bash", input: { command: "ls" }, unexamined: "effect" },
+    ]) {
+      const result = await evaluatePortableAction(action, { config });
+      assert.equal(result.level, "deny");
+      assert.equal(result.intercepted, false);
+    }
+    const valid = await evaluatePortableAction({ ...base, host: "pi", tool: "edit", input: { path: "/work/a", edits: [{ oldText: "a", newText: "b" }] } }, { config });
+    assert.equal(valid.intercepted, true);
+  } finally {
+    if (oldEvery) Object.defineProperty(Array.prototype, "every", oldEvery);
+    if (oldIncludes) Object.defineProperty(Array.prototype, "includes", oldIncludes);
+  }
+});
+
 test("inherited effect-bearing fields do not satisfy required own arguments", async () => {
   const prototype = Object.prototype as Record<string, unknown>;
   const before = Object.getOwnPropertyDescriptor(prototype, "command");
