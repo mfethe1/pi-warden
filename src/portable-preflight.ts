@@ -55,6 +55,7 @@ const weakMapGet = WeakMap.prototype.get;
 const weakMapSet = WeakMap.prototype.set;
 const weakSetHas = WeakSet.prototype.has;
 const weakSetAdd = WeakSet.prototype.add;
+const ownValues = Object.values;
 
 /**
  * Pi v0.87 executes its original validated argument reference after tool_call.
@@ -94,7 +95,7 @@ export function bindPiExecutionInput(call: PortableAction, permit: PortablePermi
 
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object") {
-    const children = Object.values(value);
+    const children = ownValues(value);
     for (let index = 0; index < children.length; index++) deepFreeze(children[index]);
     Object.freeze(value);
   }
@@ -104,7 +105,7 @@ function deepFreeze<T>(value: T): T {
 /** Keep own arguments while removing mutable Object.prototype lookups. */
 function detachObjectPrototypes(value: unknown): void {
   if (value === null || typeof value !== "object") return;
-  const children = Object.values(value);
+  const children = ownValues(value);
   for (let index = 0; index < children.length; index++) detachObjectPrototypes(children[index]);
   if (!Array.isArray(value)) Object.setPrototypeOf(value, null);
 }
@@ -113,7 +114,7 @@ function detachObjectPrototypes(value: unknown): void {
 function hasDetachedObjectPrototypes(value: unknown): boolean {
   if (value === null || typeof value !== "object") return true;
   if (!Array.isArray(value) && Object.getPrototypeOf(value) !== null) return false;
-  const children = Object.values(value);
+  const children = ownValues(value);
   for (let index = 0; index < children.length; index++) {
     if (!hasDetachedObjectPrototypes(children[index])) return false;
   }
