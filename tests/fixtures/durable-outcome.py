@@ -65,6 +65,8 @@ def verify(stalled=False):
         # Hold the winner after its durable reservation: prove overlap before any effect.
         first = subprocess.Popen(command(root, 'race', 'held-silent' if stalled else 'held'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
+            if stalled:
+                print('OBSERVED: ' + json.dumps({'pid': first.pid, 'root': str(root)}), flush=True)
             assert first.stdout is not None
             ready = queue.Queue()
             threading.Thread(target=lambda: ready.put(first.stdout.readline()), daemon=True).start()

@@ -45,7 +45,18 @@ This bounds tested stalls, not arbitrary forced termination of the fixture.
 
 Post-review canonical run passed typecheck, 1,321 tests / 0 failed / 0 skipped,
 and build; log: `/Users/mfethe/pi-warden-program/durable-outcome-review-fixes.log`.
-Re-review is required before merge.
+Narrow independent approval at fef866d confirmed the three fixes but found
+that the cleanup test trusted a marker. The regression now observes the held
+worker PID with `process.kill(pid, 0)` and checks removal of the fixture root
+inside a test-owned scratch directory. A repository-owned mutation test removes
+the worker cleanup and must be rejected as still alive; the observer then kills
+the deliberately leaked worker and removes its scratch directory. These checks
+cover a controlled child fixture, not arbitrary or hostile PID reports.
+
+The strengthened canonical run passed typecheck, 1,322 tests / 0 failed /
+0 skipped, and build. Evidence:
+`/Users/mfethe/pi-warden-program/durable-outcome-observed-cleanup.log`.
+Re-review of the strengthened revision is required before merge.
 
 BLOCKER WARDEN-CANONICAL-SCRATCH: resolved by the test-only isolation change.
 Independent review is still required before merge. This does not establish
