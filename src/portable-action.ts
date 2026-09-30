@@ -1,6 +1,7 @@
 import { defaultConfig } from "./config.js";
 import type { ActionGuardConfig } from "./config.js";
 import { plainData } from "./portable-plain-data.js";
+import { validPortablePolicy } from "./portable-policy.js";
 import { evaluateAction } from "./guard.js";
 import type { Level, Verdict } from "./guard.js";
 
@@ -139,7 +140,7 @@ function completeShape(value: unknown, template: unknown): boolean {
 export async function evaluatePortableAction(action: PortableAction, options: { config: ActionGuardConfig }): Promise<PortableDecision> {
   try {
     if (!plainData(action) || !plainData(options)
-        || !completeShape(options?.config, defaultConfig().action)) {
+        || !completeShape(options?.config, defaultConfig().action) || !validPortablePolicy(options.config)) {
       return reject("Malformed action or incomplete policy; action was not authorized");
     }
     return await evaluatePortableActionUnchecked(action, options);
