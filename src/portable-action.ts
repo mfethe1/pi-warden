@@ -31,7 +31,8 @@ const HOST_TOOLS: Readonly<Record<string, readonly string[]>> = {
 };
 
 const TOOL_FIELDS: Readonly<Record<string, readonly string[]>> = {
-  bash: ["command"], Bash: ["command", "timeout"], "functions.terminal": ["command", "timeout", "workdir"],
+  // Timeouts are deliberately unsupported: the guard cannot show their execution effect to an approver.
+  bash: ["command"], Bash: ["command"], "functions.terminal": ["command", "workdir"],
   write: ["path", "content"], Write: ["file_path", "content"], "functions.write_file": ["path", "content"],
   edit: ["path", "edits"], Edit: ["file_path", "old_string", "new_string", "replace_all"],
   "functions.patch": ["mode", "path", "old_string", "new_string", "replace_all"],
@@ -66,10 +67,13 @@ function normalize(tool: string, input: Record<string, unknown>): { tool: string
     if (!nonempty(path)) return undefined;
     if (tool === "edit") {
       if (!Array.isArray(input.edits) || input.edits.length === 0 || input.edits.length > 3
-          || !input.edits.every(item => item && typeof item === "object" && nonempty(item.oldText) && typeof item.newText === "string")) return undefined;
+          || !input.edits.every(item => item && typeof item === "object" && !Array.isArray(item)
+            && Object.keys(item).every(key => key === "oldText" || key === "newText")
+            && nonempty(item.oldText) && typeof item.newText === "string")) return undefined;
       return { tool: "edit", input: { path, edits: input.edits } };
     }
-    if (!nonempty(input.old_string) || typeof input.new_string !== "string" || input.replace_all === true) return undefined;
+    if (!nonempty(input.old_string) || typeof input.new_string !== "string"
+        || (Object.hasOwn(input, "replace_all") && input.replace_all !== false)) return undefined;
     return { tool: "edit", input: { path, edits: [{ oldText: input.old_string, newText: input.new_string }] } };
   }
   return undefined;

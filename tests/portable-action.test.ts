@@ -70,11 +70,16 @@ test("maps write and edit shapes with effect-bearing fields intact", async () =>
 test("unknown or asynchronous effect-bearing options cannot be silently dropped", async () => {
   for (const [host, tool, input] of [
     ["hermes", "functions.terminal", { command: "ls", background: true }],
+    ["hermes", "functions.terminal", { command: "ls", timeout: 5000 }],
+    ["claude", "Bash", { command: "ls", timeout: 5000 }],
     ["hermes", "functions.terminal", { command: "ls", workdir: null }],
     ["claude", "Bash", { command: "ls", run_in_background: true }],
     ["pi", "bash", { command: "ls", env: { SAFE: "1" } }],
     ["hermes", "functions.write_file", { path: "/work/a", content: "x", chmod: "777" }],
     ["claude", "Edit", { file_path: "/work/a", old_string: "a", new_string: "b", replace_all: true, extra: "ignored" }],
+    ["claude", "Edit", { file_path: "/work/a", old_string: "a", new_string: "b", replace_all: 1 }],
+    ["hermes", "functions.patch", { mode: "replace", path: "/work/a", old_string: "a", new_string: "b", replace_all: "false" }],
+    ["pi", "edit", { path: "/work/a", edits: [{ oldText: "a", newText: "b", extra_effect: "delete" }] }],
   ] as const) {
     const result = await evaluatePortableAction({ ...base, host, tool, input }, { config });
     assert.equal(result.level, "deny", `${host}/${tool}`);
