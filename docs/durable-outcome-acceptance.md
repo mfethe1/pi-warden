@@ -16,23 +16,28 @@ Operation IDs are test constants. It proves neither authenticated identities,
 human assent, safe intentional repeats, trusted reconciliation, power-loss
 survival, nor atomicity between the database and filesystem effect.
 
-## Current gate blocker
+## Gate recovery
 
-On 2026-09-30, candidate `npm run check` returned exit 1: 1,320 tests,
-1,290 pass / 30 fail. The new test passed. Unchanged parent d91b023 returned
-exit 1: 1,319 tests, 1,289 pass / 30 fail, with exactly the same failing names.
-Both typechecks passed; build was not reached because the check chain stopped.
-Full logs: `/Users/mfethe/pi-warden-program/durable-outcome-check.log` and
-`/Users/mfethe/pi-warden-program/durable-outcome-baseline.log`.
+The initial candidate and unchanged parent reproduced the same 30 failures.
+Root cause: temporary projects under Hermes scratch discovered an unrelated
+ancestor Git repository and inherited its ignore rules. A blanket test
+assertion also rejected safe disposable database paths under the user's home.
 
-BLOCKER WARDEN-CANONICAL-SCRATCH: owner this thread's Hermes implementation
-agent. TMPDIR is required to live in Hermes scratch under the real home, but
-inherited extension tests require temporary data outside the real home and
-show additional rules-fixture failures in this environment. Diagnose the
-loader/fixture path assumptions and make tests safely location-independent
-without weakening production rules. Do not push or merge this slice until
-canonical gates are green and independent review is complete.
+The fixture preload now sets `GIT_CEILING_DIRECTORIES` to `tmpdir()`, preventing
+ancestor repository discovery while preserving fixtures' own Git repositories.
+The database test requires the exact disposable test-agent database path rather
+than assuming all home-contained temporary directories are unsafe. Production
+policy code is unchanged; no assertions were removed or tests skipped.
 
-NEXT: resolve that attributed baseline gate, then establish a repository-owned
-executor boundary through real isolated Hermes dispatch using this durability
-coverage. All cross-harness installation claims remain unproven.
+Canonical recovery run: `TMPDIR=/Users/mfethe/.hermes/cache/scratch npm run check`
+returned exit 0: typecheck passed, 1,320 tests passed / 0 failed / 0 skipped,
+and build passed. Evidence:
+`/Users/mfethe/pi-warden-program/durable-outcome-ceiling-check.log`.
+
+BLOCKER WARDEN-CANONICAL-SCRATCH: resolved by the test-only isolation change.
+Independent review is still required before merge. This does not establish
+production authorization or host enforcement.
+
+NEXT: obtain independent review, then establish a repository-owned executor
+boundary through real isolated Hermes dispatch using this durability coverage.
+All cross-harness installation claims remain unproven.

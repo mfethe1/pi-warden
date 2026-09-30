@@ -224,11 +224,11 @@ after(async () => {
   if (temporary) await rm(temporary, { recursive: true, force: true });
 });
 
-test("PI_WARDEN_DB is set and not under the real home directory", () => {
+test("PI_WARDEN_DB is confined to the disposable test agent directory", () => {
   const dbPath = process.env.PI_WARDEN_DB;
   assert.ok(dbPath, "PI_WARDEN_DB must be set before extension tests run");
-  const home = homedir();
-  assert.ok(!dbPath.startsWith(home), `PI_WARDEN_DB (${dbPath}) must not be under the real home directory (${home})`);
+  assert.equal(resolve(dbPath), join(temporary, "agent", "pi-warden", "holds.db"));
+  assert.notEqual(resolve(temporary), resolve(homedir()));
 });
 
 test("should-proceed defaults to trace-only for interactive and headless agents", async () => {
