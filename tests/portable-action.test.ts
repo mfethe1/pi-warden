@@ -64,6 +64,12 @@ test("rejects malformed envelopes and conflicting workdirs", async () => {
   }
 });
 
+test("unknown action-envelope fields are denied rather than dropped", async () => {
+  const result = await evaluatePortableAction({ ...base, host: "pi", tool: "bash", input: { command: "ls" }, executionMode: "background" } as never, { config });
+  assert.equal(result.level, "deny");
+  assert.equal(result.intercepted, false);
+});
+
 test("malformed adapter arguments fail closed rather than throwing before evaluation", async () => {
   const action = { ...base, host: "pi", tool: "bash", input: { command: "ls" } };
   for (const malformed of [undefined, null, { config: undefined }, { config: { tools: null } }] as const) {

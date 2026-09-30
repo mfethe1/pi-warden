@@ -84,6 +84,9 @@ export async function evaluatePortableAction(action: PortableAction, options: { 
   if (!action || typeof action !== "object" || Array.isArray(action)) {
     return reject("Invalid action envelope; cannot establish origin or scope");
   }
+  if (!Object.keys(action).every(key => ["host", "sessionId", "callId", "cwd", "task", "tool", "input"].includes(key))) {
+    return reject("Unrecognized action-envelope field; cannot discard effect-bearing context");
+  }
   if (![action.host, action.sessionId, action.callId, action.task, action.tool].every(nonempty)
       || !nonempty(action.cwd) || !action.cwd.startsWith("/")
       || !action.input || typeof action.input !== "object" || Array.isArray(action.input)) {
