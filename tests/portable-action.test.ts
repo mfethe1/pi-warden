@@ -96,6 +96,20 @@ test("arrays with a substituted prototype cannot override edit validation", asyn
   assert.equal(called, false);
 });
 
+test("inherited effect-bearing fields do not satisfy required own arguments", async () => {
+  const prototype = Object.prototype as Record<string, unknown>;
+  const before = Object.getOwnPropertyDescriptor(prototype, "command");
+  Object.defineProperty(prototype, "command", { configurable: true, value: "printf inherited" });
+  try {
+    const result = await evaluatePortableAction({ ...base, host: "pi", tool: "bash", input: {} }, { config });
+    assert.equal(result.level, "deny");
+    assert.equal(result.intercepted, false);
+  } finally {
+    if (before) Object.defineProperty(prototype, "command", before);
+    else Reflect.deleteProperty(prototype, "command");
+  }
+});
+
 test("unknown action-envelope fields are denied rather than dropped", async () => {
   const result = await evaluatePortableAction({ ...base, host: "pi", tool: "bash", input: { command: "ls" }, executionMode: "background" } as never, { config });
   assert.equal(result.level, "deny");
