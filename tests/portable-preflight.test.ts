@@ -34,6 +34,29 @@ test("Pi input binder rejects post-approval changes and freezes nested edits", a
   assert.throws(() => { input.edits[0]!.newText = "malicious"; }, TypeError);
 });
 
+test("mutated array iterator cannot skip freezing approved or executing nested edits", async () => {
+  const input = { path: "/tmp/example", edits: [{ oldText: "before", newText: "after" }] };
+  const request: PortableAction = { ...action(), tool: "edit", input };
+  const original = Object.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
+  let frozen: boolean | undefined;
+  let result: boolean | undefined;
+  Object.defineProperty(Array.prototype, Symbol.iterator, { configurable: true, value: function* () {} });
+  try {
+    const permit = await preflightPortableAction(request, { config }, async () => true);
+    assert.equal(permit.block, false);
+    if (permit.block) return;
+    result = bindPiExecutionInput(request, permit).block;
+    frozen = Object.isFrozen(permit.action.input.edits) && Object.isFrozen(input.edits)
+      && Object.isFrozen(input.edits[0]);
+  } finally {
+    if (original) Object.defineProperty(Array.prototype, Symbol.iterator, original);
+    else Reflect.deleteProperty(Array.prototype, Symbol.iterator);
+  }
+  assert.equal(result, false);
+  assert.equal(frozen, true);
+  assert.throws(() => { input.edits[0]!.newText = "unapproved"; }, TypeError);
+});
+
 test("inherited toJSON cannot conceal a changed Pi execution command", async () => {
   const request = action();
   const permit = await preflightPortableAction(request, { config }, async () => true);
