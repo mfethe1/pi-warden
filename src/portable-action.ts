@@ -40,9 +40,36 @@ const TOOL_FIELDS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /** Reject unexamined fields: a host may add an effectful option in a later release. */
+function contains(values: readonly string[], candidate: string): boolean {
+  for (let index = 0; index < values.length; index++) {
+    if (values[index] === candidate) return true;
+  }
+  return false;
+}
+
 function knownFields(tool: string, input: Record<string, unknown>): boolean {
   const permitted = TOOL_FIELDS[tool];
-  return !!permitted && Object.keys(input).every(key => permitted.includes(key));
+  if (!permitted) return false;
+  const keys = Object.keys(input);
+  for (let index = 0; index < keys.length; index++) {
+    if (!contains(permitted, keys[index]!)) return false;
+  }
+  return true;
+}
+
+function validEdits(edits: unknown): edits is { oldText: string; newText: string }[] {
+  if (!Array.isArray(edits) || edits.length === 0 || edits.length > 3) return false;
+  for (let index = 0; index < edits.length; index++) {
+    const item = edits[index];
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const keys = Object.keys(item);
+    for (let field = 0; field < keys.length; field++) {
+      if (keys[field] !== "oldText" && keys[field] !== "newText") return false;
+    }
+    if (!Object.hasOwn(item, "oldText") || !nonempty(item.oldText)
+        || !Object.hasOwn(item, "newText") || typeof item.newText !== "string") return false;
+  }
+  return true;
 }
 
 function nonempty(value: unknown): value is string {
@@ -59,27 +86,23 @@ function ownPath(input: Record<string, unknown>): unknown {
 
 /** Explicit tool mapping; unknown tools are never assumed read-only. */
 function normalize(tool: string, input: Record<string, unknown>): { tool: string; input: Record<string, unknown> } | undefined {
-  if (["bash", "Bash", "functions.terminal"].includes(tool)) {
+  if (contains(["bash", "Bash", "functions.terminal"], tool)) {
     if (!ownNonempty(input, "command")) return undefined;
     return { tool: "bash", input: { command: input.command } };
   }
   // Arbitrary Python/JS code execution has no sound shell-command mapping.
   // Until a host-specific adapter can inspect its effects, deny it here.
-  if (["write", "Write", "functions.write_file"].includes(tool)) {
+  if (contains(["write", "Write", "functions.write_file"], tool)) {
     const path = ownPath(input);
     if (!nonempty(path) || !Object.hasOwn(input, "content") || typeof input.content !== "string") return undefined;
     return { tool: "write", input: { path, content: input.content } };
   }
-  if (["edit", "Edit", "functions.patch"].includes(tool)) {
+  if (contains(["edit", "Edit", "functions.patch"], tool)) {
     if (tool === "functions.patch" && (!Object.hasOwn(input, "mode") || input.mode !== "replace")) return undefined;
     const path = ownPath(input);
     if (!nonempty(path)) return undefined;
     if (tool === "edit") {
-      if (!Object.hasOwn(input, "edits") || !Array.isArray(input.edits) || input.edits.length === 0 || input.edits.length > 3
-          || !input.edits.every(item => item && typeof item === "object" && !Array.isArray(item)
-            && Object.keys(item).every(key => key === "oldText" || key === "newText")
-            && Object.hasOwn(item, "oldText") && nonempty(item.oldText)
-            && Object.hasOwn(item, "newText") && typeof item.newText === "string")) return undefined;
+      if (!Object.hasOwn(input, "edits") || !validEdits(input.edits)) return undefined;
       return { tool: "edit", input: { path, edits: input.edits } };
     }
     if (!ownNonempty(input, "old_string") || !Object.hasOwn(input, "new_string")
@@ -98,16 +121,22 @@ async function evaluatePortableActionUnchecked(action: PortableAction, options: 
   if (!plainData(action)) {
     return reject("Invalid action envelope; hidden or non-data fields cannot be inspected");
   }
-  if (!Object.keys(action).every(key => ["host", "sessionId", "callId", "cwd", "task", "tool", "input"].includes(key))) {
-    return reject("Unrecognized action-envelope field; cannot discard effect-bearing context");
+  const required = ["host", "sessionId", "callId", "cwd", "task", "tool", "input"];
+  const actionKeys = Object.keys(action);
+  for (let index = 0; index < actionKeys.length; index++) {
+    if (!contains(required, actionKeys[index]!)) return reject("Unrecognized action-envelope field; cannot discard effect-bearing context");
   }
-  if (!["host", "sessionId", "callId", "cwd", "task", "tool", "input"].every(key => Object.hasOwn(action, key))
-      || ![action.host, action.sessionId, action.callId, action.task, action.tool].every(nonempty)
+  for (let index = 0; index < required.length; index++) {
+    if (!Object.hasOwn(action, required[index]!)) return reject("Invalid action envelope; cannot establish origin or scope");
+  }
+  if (!nonempty(action.host) || !nonempty(action.sessionId) || !nonempty(action.callId)
+      || !nonempty(action.task) || !nonempty(action.tool)
       || !nonempty(action.cwd) || !action.cwd.startsWith("/")
       || !action.input || typeof action.input !== "object" || Array.isArray(action.input)) {
     return reject("Invalid action envelope; cannot establish origin or scope");
   }
-  if (!Object.hasOwn(HOST_TOOLS, action.host) || !HOST_TOOLS[action.host]?.includes(action.tool)) {
+  const hostTools = Object.hasOwn(HOST_TOOLS, action.host) ? HOST_TOOLS[action.host] : undefined;
+  if (!hostTools || !contains(hostTools, action.tool)) {
     return reject("Unverified host/tool contract; this adapter cannot promise pre-execution coverage");
   }
   if (!knownFields(action.tool, action.input)) {
