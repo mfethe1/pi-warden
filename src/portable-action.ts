@@ -23,6 +23,8 @@ export interface PortableDecision {
 }
 
 const reject = (reason: string): PortableDecision => ({ level: "deny", intercepted: false, reason });
+// A later same-process replacement must not hide effect-bearing fields.
+const ownKeys = Object.keys;
 
 /** Tool names are host-specific. ChatGPT integrations need a verified hook contract first. */
 const HOST_TOOLS: Readonly<Record<string, readonly string[]>> = {
@@ -50,7 +52,7 @@ function contains(values: readonly string[], candidate: string): boolean {
 function knownFields(tool: string, input: Record<string, unknown>): boolean {
   const permitted = TOOL_FIELDS[tool];
   if (!permitted) return false;
-  const keys = Object.keys(input);
+  const keys = ownKeys(input);
   for (let index = 0; index < keys.length; index++) {
     if (!contains(permitted, keys[index]!)) return false;
   }
@@ -62,7 +64,7 @@ function validEdits(edits: unknown): edits is { oldText: string; newText: string
   for (let index = 0; index < edits.length; index++) {
     const item = edits[index];
     if (!item || typeof item !== "object" || Array.isArray(item)) return false;
-    const keys = Object.keys(item);
+    const keys = ownKeys(item);
     for (let field = 0; field < keys.length; field++) {
       if (keys[field] !== "oldText" && keys[field] !== "newText") return false;
     }
@@ -122,7 +124,7 @@ async function evaluatePortableActionUnchecked(action: PortableAction, options: 
     return reject("Invalid action envelope; hidden or non-data fields cannot be inspected");
   }
   const required = ["host", "sessionId", "callId", "cwd", "task", "tool", "input"];
-  const actionKeys = Object.keys(action);
+  const actionKeys = ownKeys(action);
   for (let index = 0; index < actionKeys.length; index++) {
     if (!contains(required, actionKeys[index]!)) return reject("Unrecognized action-envelope field; cannot discard effect-bearing context");
   }
