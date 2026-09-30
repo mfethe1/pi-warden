@@ -14,6 +14,18 @@ test("known host/tool pairs hold recursive removal", async () => {
   }
 });
 
+test("unrecognized shell code cannot quietly pass as safe", async () => {
+  const result = await evaluatePortableAction({ ...base, host: "hermes", tool: "functions.terminal", input: { command: "python3 -c \"import shutil; shutil.rmtree('/work/data')\"" } }, { config });
+  assert.equal(result.level, "confirm");
+  assert.equal(result.intercepted, true);
+});
+
+test("lexically in-project writes require approval even when the guard allows them", async () => {
+  const result = await evaluatePortableAction({ ...base, host: "pi", tool: "write", input: { path: "/work/linked/external.txt", content: "overwrite" } }, { config });
+  assert.equal(result.verdict?.level, "allow");
+  assert.equal(result.level, "confirm");
+});
+
 test("unknown hosts, cross-host tool aliases and arbitrary code fail closed", async () => {
   for (const [host, tool, input] of [
     ["chatgpt", "terminal", { command: "rm -rf /" }],

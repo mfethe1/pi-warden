@@ -97,12 +97,13 @@ export async function evaluatePortableAction(action: PortableAction, options: { 
   const config = { ...options.config, enabled: true, tools: [...new Set([...options.config.tools, mapped.tool])], failOpen: false };
   try {
     const verdict = await evaluateAction({ ...mapped, cwd: action.cwd, task: action.task }, { config });
-    // A portable adapter cannot assume the host's "warn" is an enforcement
-    // boundary. Recursive removal needs an explicit hold even if Pi's local
-    // policy only warns on in-project paths. Never downgrade a stronger verdict.
-    const recursiveRemoval = verdict.patterns.some(hit => hit.id === "rm-rf" || hit.id === "rm-recursive");
-    const level = recursiveRemoval && (verdict.level === "allow" || verdict.level === "warn") ? "confirm" : verdict.level;
-    return { level, intercepted: true, reason: verdict.reasons.join("; "), verdict };
+    // The offline guard recognizes only a subset of shell semantics and uses
+    // lexical (not effective/symlink-resolved) paths. Until adapters prove
+    // execution semantics and approval binding, no mapped shell/write/edit
+    // operation may be silently allowed. Preserve stronger deny verdicts.
+    const level = verdict.level === "deny" ? "deny" : "confirm";
+    const reason = ["Portable policy requires action-scoped approval for every effectful call", ...verdict.reasons].join("; ");
+    return { level, intercepted: true, reason, verdict };
   } catch {
     return reject("Policy evaluation failed; action was not authorized");
   }
