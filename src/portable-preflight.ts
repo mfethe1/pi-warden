@@ -81,7 +81,8 @@ export function bindPiExecutionInput(call: PortableAction, permit: PortablePermi
 
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object") {
-    for (const child of Object.values(value)) deepFreeze(child);
+    const children = Object.values(value);
+    for (let index = 0; index < children.length; index++) deepFreeze(children[index]);
     Object.freeze(value);
   }
   return value;
@@ -90,7 +91,8 @@ function deepFreeze<T>(value: T): T {
 /** Keep own arguments while removing mutable Object.prototype lookups. */
 function detachObjectPrototypes(value: unknown): void {
   if (value === null || typeof value !== "object") return;
-  for (const child of Object.values(value)) detachObjectPrototypes(child);
+  const children = Object.values(value);
+  for (let index = 0; index < children.length; index++) detachObjectPrototypes(children[index]);
   if (!Array.isArray(value)) Object.setPrototypeOf(value, null);
 }
 
