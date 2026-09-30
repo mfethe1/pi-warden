@@ -1,6 +1,6 @@
 import type { ActionGuardConfig } from "./config.js";
 import { evaluatePortableAction } from "./portable-action.js";
-import { plainData } from "./portable-plain-data.js";
+import { canonicalJson, plainData } from "./portable-plain-data.js";
 import type { PortableAction, PortableDecision } from "./portable-action.js";
 
 export type PortableApproval = (action: Readonly<PortableAction>, decision: PortableDecision) => Promise<boolean>;
@@ -60,11 +60,11 @@ export function bindPiExecutionInput(call: PortableAction, permit: PortablePermi
     if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
     const { input } = call;
     if (permit.block || permit.action.host !== "pi" || !plainData(call)
-        || JSON.stringify(call) !== JSON.stringify(permit.action)) {
+        || canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call differs from approved invocation");
     }
     deepFreeze(input);
-    if (JSON.stringify(call) !== JSON.stringify(permit.action)) {
+    if (canonicalJson(call) !== canonicalJson(permit.action)) {
       return block("Pi execution call changed during binding");
     }
     if (boundPiPermits.has(permit)) return block("Pi permit has already been bound");
@@ -97,8 +97,8 @@ export async function preflightPortableAction(
   let snapshot: PortableAction;
   try {
     if (!plainData(action)) return block("Action cannot be bound to approval");
-    before = JSON.stringify(action);
-    if (!before || JSON.stringify(JSON.parse(before)) !== before) return block("Action cannot be bound to approval");
+    before = canonicalJson(action) ?? "";
+    if (!before || canonicalJson(JSON.parse(before)) !== before) return block("Action cannot be bound to approval");
     snapshot = deepFreeze(JSON.parse(before) as PortableAction);
   } catch {
     return block("Action cannot be bound to approval");
@@ -116,7 +116,7 @@ export async function preflightPortableAction(
     }
     // Both the policy and the approver inspect the same immutable invocation.
     const accepted = await approve(snapshot, decision);
-    if (accepted !== true || !plainData(action) || JSON.stringify(action) !== before) {
+    if (accepted !== true || !plainData(action) || canonicalJson(action) !== before) {
       return block("Approval declined or action changed while awaiting approval");
     }
     return { block: false, action: snapshot };

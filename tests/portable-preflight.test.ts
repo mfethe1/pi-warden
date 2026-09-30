@@ -34,6 +34,29 @@ test("Pi input binder rejects post-approval changes and freezes nested edits", a
   assert.throws(() => { input.edits[0]!.newText = "malicious"; }, TypeError);
 });
 
+test("inherited toJSON cannot conceal a changed Pi execution command", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  request.input.command = "printf EVIL";
+  const prototype = Object.prototype as Record<string, unknown>;
+  const before = Object.getOwnPropertyDescriptor(prototype, "toJSON");
+  Object.defineProperty(prototype, "toJSON", {
+    configurable: true,
+    value(this: { command?: string }) {
+      return this.command === "printf EVIL" ? { ...this, command: "printf 'ok'" } : this;
+    },
+  });
+  try {
+    assert.equal(bindPiExecutionInput(request, permit).block, true);
+    assert.equal(request.input.command, "printf EVIL");
+  } finally {
+    if (before) Object.defineProperty(prototype, "toJSON", before);
+    else Reflect.deleteProperty(prototype, "toJSON");
+  }
+});
+
 test("shared ledger consumes a call ID before approval and blocks concurrent replay", async () => {
   const ledger = new PortableCallLedger();
   let promptCount = 0;
