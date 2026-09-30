@@ -49,31 +49,41 @@ function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
+function ownNonempty(input: Record<string, unknown>, key: string): boolean {
+  return Object.hasOwn(input, key) && nonempty(input[key]);
+}
+
+function ownPath(input: Record<string, unknown>): unknown {
+  return Object.hasOwn(input, "path") ? input.path : Object.hasOwn(input, "file_path") ? input.file_path : undefined;
+}
+
 /** Explicit tool mapping; unknown tools are never assumed read-only. */
 function normalize(tool: string, input: Record<string, unknown>): { tool: string; input: Record<string, unknown> } | undefined {
   if (["bash", "Bash", "functions.terminal"].includes(tool)) {
-    if (!nonempty(input.command)) return undefined;
+    if (!ownNonempty(input, "command")) return undefined;
     return { tool: "bash", input: { command: input.command } };
   }
   // Arbitrary Python/JS code execution has no sound shell-command mapping.
   // Until a host-specific adapter can inspect its effects, deny it here.
   if (["write", "Write", "functions.write_file"].includes(tool)) {
-    const path = input.path ?? input.file_path;
-    if (!nonempty(path) || typeof input.content !== "string") return undefined;
+    const path = ownPath(input);
+    if (!nonempty(path) || !Object.hasOwn(input, "content") || typeof input.content !== "string") return undefined;
     return { tool: "write", input: { path, content: input.content } };
   }
   if (["edit", "Edit", "functions.patch"].includes(tool)) {
-    if (tool === "functions.patch" && input.mode !== "replace") return undefined;
-    const path = input.path ?? input.file_path;
+    if (tool === "functions.patch" && (!Object.hasOwn(input, "mode") || input.mode !== "replace")) return undefined;
+    const path = ownPath(input);
     if (!nonempty(path)) return undefined;
     if (tool === "edit") {
-      if (!Array.isArray(input.edits) || input.edits.length === 0 || input.edits.length > 3
+      if (!Object.hasOwn(input, "edits") || !Array.isArray(input.edits) || input.edits.length === 0 || input.edits.length > 3
           || !input.edits.every(item => item && typeof item === "object" && !Array.isArray(item)
             && Object.keys(item).every(key => key === "oldText" || key === "newText")
-            && nonempty(item.oldText) && typeof item.newText === "string")) return undefined;
+            && Object.hasOwn(item, "oldText") && nonempty(item.oldText)
+            && Object.hasOwn(item, "newText") && typeof item.newText === "string")) return undefined;
       return { tool: "edit", input: { path, edits: input.edits } };
     }
-    if (!nonempty(input.old_string) || typeof input.new_string !== "string"
+    if (!ownNonempty(input, "old_string") || !Object.hasOwn(input, "new_string")
+        || typeof input.new_string !== "string"
         || (Object.hasOwn(input, "replace_all") && input.replace_all !== false)) return undefined;
     return { tool: "edit", input: { path, edits: [{ oldText: input.old_string, newText: input.new_string }] } };
   }
@@ -91,7 +101,8 @@ async function evaluatePortableActionUnchecked(action: PortableAction, options: 
   if (!Object.keys(action).every(key => ["host", "sessionId", "callId", "cwd", "task", "tool", "input"].includes(key))) {
     return reject("Unrecognized action-envelope field; cannot discard effect-bearing context");
   }
-  if (![action.host, action.sessionId, action.callId, action.task, action.tool].every(nonempty)
+  if (!["host", "sessionId", "callId", "cwd", "task", "tool", "input"].every(key => Object.hasOwn(action, key))
+      || ![action.host, action.sessionId, action.callId, action.task, action.tool].every(nonempty)
       || !nonempty(action.cwd) || !action.cwd.startsWith("/")
       || !action.input || typeof action.input !== "object" || Array.isArray(action.input)) {
     return reject("Invalid action envelope; cannot establish origin or scope");
