@@ -2,6 +2,7 @@
 const ownKeys = Object.keys;
 const allOwnKeys = Reflect.ownKeys;
 const ownDescriptor = Object.getOwnPropertyDescriptor;
+const getPrototype = Object.getPrototypeOf;
 const setPrototype = Object.setPrototypeOf;
 const create = Object.create;
 const stringify = JSON.stringify;
@@ -12,7 +13,7 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
   if (typeof value === "number") return Number.isFinite(value);
   if (typeof value !== "object" || seen.has(value)) return false;
   if (Array.isArray(value)) {
-    if (Object.getPrototypeOf(value) !== Array.prototype
+    if (getPrototype(value) !== Array.prototype
         || allOwnKeys(value).length !== value.length + 1) return false;
     seen.add(value);
     let valid = ownKeys(value).length === value.length;
@@ -23,7 +24,7 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
     seen.delete(value);
     return valid;
   }
-  const prototype = Object.getPrototypeOf(value);
+  const prototype = getPrototype(value);
   if (prototype !== Object.prototype && prototype !== null) return false;
   seen.add(value);
   const keys = allOwnKeys(value);

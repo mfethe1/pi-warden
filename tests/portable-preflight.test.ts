@@ -6,12 +6,28 @@ import { join } from "node:path";
 import { defaultConfig } from "../src/config.js";
 import type { PortableAction } from "../src/portable-action.js";
 import { bindPiExecutionInput, executePortableAction, PortableCallLedger, preflightPortableAction } from "../src/portable-preflight.js";
+import { plainData } from "../src/portable-plain-data.js";
 import type { PortableApproval } from "../src/portable-preflight.js";
 
 const config = defaultConfig().action;
 const action = () => ({
   host: "pi", sessionId: "session-1", callId: "call-1", cwd: "/work", task: "Inspect files",
   tool: "bash", input: { command: "printf 'ok'" },
+});
+
+test("later getPrototypeOf replacement cannot bless an inherited effect-bearing field", () => {
+  const input = Object.create({ timeout: 0 }) as Record<string, unknown>;
+  input.command = "printf 'ok'";
+  const original = Object.getOwnPropertyDescriptor(Object, "getPrototypeOf");
+  Object.defineProperty(Object, "getPrototypeOf", {
+    configurable: true,
+    value: (value: object) => value === input ? Object.prototype : Reflect.getPrototypeOf(value),
+  });
+  try {
+    assert.equal(plainData(input), false);
+  } finally {
+    if (original) Object.defineProperty(Object, "getPrototypeOf", original);
+  }
 });
 
 test("Pi binder rejects a forged or copied permit even for matching inputs", async () => {
