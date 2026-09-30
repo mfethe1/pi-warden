@@ -1,6 +1,7 @@
 const ownKeys = Reflect.ownKeys;
 const descriptor = Object.getOwnPropertyDescriptor;
 const prototype = Object.getPrototypeOf;
+const objectKeys = new Set(["constructor", "__defineGetter__", "__defineSetter__", "hasOwnProperty", "__lookupGetter__", "__lookupSetter__", "isPrototypeOf", "propertyIsEnumerable", "toString", "valueOf", "__proto__", "toLocaleString"]);
 
 /** Reject inherited, hidden, accessor, sparse and non-JSON data before reading it. */
 export function plainData(value: unknown, seen = new WeakSet<object>()): boolean {
@@ -10,6 +11,8 @@ export function plainData(value: unknown, seen = new WeakSet<object>()): boolean
   const array = Array.isArray(value);
   const parent = prototype(value);
   if (array ? parent !== Array.prototype : parent !== Object.prototype && parent !== null) return false;
+  // An extended standard prototype is inherited input too; never invoke its getters.
+  if (parent === Object.prototype && ownKeys(parent).some(key => typeof key !== "string" || !objectKeys.has(key))) return false;
   seen.add(value);
   const keys = ownKeys(value);
   if (array && keys.length !== value.length + 1) return false;

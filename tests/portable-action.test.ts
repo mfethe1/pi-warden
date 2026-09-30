@@ -4,6 +4,25 @@ import { defaultConfig } from "../src/config.js";
 import { evaluatePortableAction } from "../src/portable-action.js";
 
 const base = { sessionId: "s1", callId: "c1", cwd: "/work", task: "Inspect files" } as const;
+test("standard-prototype fields cannot supply required values or redirect a protected path", async () => {
+  for (const field of ["command", "path", "sessionId", "config", "workdir", "replace_all"]) {
+    const prior = Object.getOwnPropertyDescriptor(Object.prototype, field);
+    let reads = 0;
+    try {
+      Object.defineProperty(Object.prototype, field, { configurable: true, get() { reads++; return field === "config" ? config : "/work/unprotected"; } });
+      const action = { ...base, host: "hermes", tool: "functions.terminal", input: { command: "ls" } };
+      if (field === "command") delete (action.input as Partial<typeof action.input>).command;
+      if (field === "sessionId") delete (action as Partial<typeof action>).sessionId;
+      if (field === "path") Object.assign(action, { host: "claude", tool: "Write", input: { file_path: "/work/protected", content: "x" } });
+      const decision = await evaluatePortableAction(action, field === "config" ? {} as { config: typeof config } : { config });
+      assert.equal(decision.level, "deny", field);
+      assert.equal(reads, 0, field);
+    } finally {
+      if (prior) Object.defineProperty(Object.prototype, field, prior); else Reflect.deleteProperty(Object.prototype, field);
+    }
+  }
+});
+
 const config = defaultConfig().action;
 
 test("direct mapper rejects hidden, inherited, sparse and accessor data", async () => {
