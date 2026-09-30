@@ -25,6 +25,23 @@ test("standard-prototype fields cannot supply required values or redirect a prot
 
 const config = defaultConfig().action;
 
+test("inherited writable path cannot downgrade an explicit protected-path deny", async () => {
+  const action = { ...base, host: "claude", tool: "Write", input: { file_path: "/work/protected", content: "x" } };
+  const protectedConfig = { ...config, pathRules: [{ id: "protected", paths: ["/work/protected"], access: "none" as const, tools: ["write"], action: "block" as const, onlyIfExists: false }] };
+  const control = await evaluatePortableAction(action, { config: protectedConfig });
+  assert.equal(control.level, "deny");
+  assert.equal(control.intercepted, true);
+  const prior = Object.getOwnPropertyDescriptor(Object.prototype, "path");
+  try {
+    Object.defineProperty(Object.prototype, "path", { configurable: true, writable: true, value: "/work/unprotected" });
+    const denied = await evaluatePortableAction(action, { config: protectedConfig });
+    assert.equal(denied.level, "deny");
+    assert.equal(denied.intercepted, false);
+  } finally {
+    if (prior) Object.defineProperty(Object.prototype, "path", prior); else Reflect.deleteProperty(Object.prototype, "path");
+  }
+});
+
 test("direct mapper rejects hidden, inherited, sparse and accessor data", async () => {
   let reads = 0;
   const inputs = [
