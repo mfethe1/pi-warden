@@ -231,6 +231,27 @@ test("inherited toJSON cannot conceal a changed Pi execution command", async () 
   }
 });
 
+test("replacing Object.keys after approval cannot conceal a changed Pi command", async () => {
+  const request = action();
+  const permit = await preflightPortableAction(request, { config }, async () => true);
+  assert.equal(permit.block, false);
+  if (permit.block) return;
+  request.input.command = "printf UNAPPROVED";
+  const original = Object.getOwnPropertyDescriptor(Object, "keys");
+  const keys = Object.keys;
+  let blocked: boolean | undefined;
+  Object.defineProperty(Object, "keys", {
+    configurable: true,
+    value: (value: object) => keys(value).filter((key) => key !== "command"),
+  });
+  try {
+    blocked = bindPiExecutionInput(request, permit).block;
+  } finally {
+    if (original) Object.defineProperty(Object, "keys", original);
+  }
+  assert.equal(blocked, true);
+});
+
 test("approved and Pi-bound inputs cannot acquire inherited optional fields", async () => {
   const request = action();
   const permit = await preflightPortableAction(request, { config }, async () => true);
