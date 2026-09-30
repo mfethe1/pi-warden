@@ -33,14 +33,15 @@ test("Pi tool_call denial prevents a registered host tool from writing a file", 
       },
     });
     pi.on("tool_call", async (event) => {
-      const result = await preflightPortableAction({
-        host: "pi", sessionId: "offline-test", callId: event.toolCallId,
+      const call = {
+        host: "pi" as const, sessionId: "offline-test", callId: event.toolCallId,
         cwd: dir, task: "write the probe file", tool: event.toolName, input: event.input,
-      }, { config: defaultConfig().action }, async () => approved);
+      };
+      const result = await preflightPortableAction(call, { config: defaultConfig().action }, async () => approved);
       if (result.block) return { block: true, reason: result.reason };
       // Pi has no replacement-input return value. Bind its actual validated args
       // to the approved snapshot and freeze recursively before later handlers.
-      const binding = bindPiExecutionInput(event.input, result);
+      const binding = bindPiExecutionInput({ ...call, callId: event.toolCallId, tool: event.toolName, input: event.input }, result);
       if (binding.block) return { block: true, reason: binding.reason };
       return undefined;
     });
@@ -86,12 +87,13 @@ test("Pi built-in write is blocked until its input is approved", async () => {
   let mutationBlocked = 0;
   const extension = ((pi: ExtensionAPI) => {
     pi.on("tool_call", async event => {
-      const permit = await preflightPortableAction({
-        host: "pi", sessionId: "builtin-test", callId: event.toolCallId,
+      const call = {
+        host: "pi" as const, sessionId: "builtin-test", callId: event.toolCallId,
         cwd: dir, task: "write the probe file", tool: event.toolName, input: event.input,
-      }, { config: defaultConfig().action }, async () => approved);
+      };
+      const permit = await preflightPortableAction(call, { config: defaultConfig().action }, async () => approved);
       if (permit.block) return { block: true, reason: permit.reason };
-      const binding = bindPiExecutionInput(event.input, permit);
+      const binding = bindPiExecutionInput({ ...call, callId: event.toolCallId, tool: event.toolName, input: event.input }, permit);
       if (binding.block) return { block: true, reason: binding.reason };
       return undefined;
     });
@@ -136,12 +138,13 @@ test("Pi built-in bash blocks a declined side effect and preserves approved comm
   let mutationBlocked = 0;
   const extension = ((pi: ExtensionAPI) => {
     pi.on("tool_call", async event => {
-      const permit = await preflightPortableAction({
-        host: "pi", sessionId: "bash-test", callId: event.toolCallId,
+      const call = {
+        host: "pi" as const, sessionId: "bash-test", callId: event.toolCallId,
         cwd: dir, task: "write the probe file", tool: event.toolName, input: event.input,
-      }, { config: defaultConfig().action }, async () => approved);
+      };
+      const permit = await preflightPortableAction(call, { config: defaultConfig().action }, async () => approved);
       if (permit.block) return { block: true, reason: permit.reason };
-      const binding = bindPiExecutionInput(event.input, permit);
+      const binding = bindPiExecutionInput({ ...call, callId: event.toolCallId, tool: event.toolName, input: event.input }, permit);
       if (binding.block) return { block: true, reason: binding.reason };
       return undefined;
     });
@@ -186,12 +189,13 @@ test("Pi built-in edit freezes nested arguments before later handlers and execut
   let approved = false;
   const extension = ((pi: ExtensionAPI) => {
     pi.on("tool_call", async (event) => {
-      const result = await preflightPortableAction({
-        host: "pi", sessionId: "nested-test", callId: event.toolCallId,
+      const call = {
+        host: "pi" as const, sessionId: "nested-test", callId: event.toolCallId,
         cwd: dir, task: "edit the probe", tool: event.toolName, input: event.input,
-      }, { config: defaultConfig().action }, async () => approved);
+      };
+      const result = await preflightPortableAction(call, { config: defaultConfig().action }, async () => approved);
       if (result.block) return { block: true, reason: result.reason };
-      const binding = bindPiExecutionInput(event.input, result);
+      const binding = bindPiExecutionInput({ ...call, callId: event.toolCallId, tool: event.toolName, input: event.input }, result);
       if (binding.block) return { block: true, reason: binding.reason };
       return undefined;
     });

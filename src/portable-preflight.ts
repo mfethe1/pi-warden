@@ -48,18 +48,20 @@ const block = (reason: string): PortableBlock => ({ block: true, reason });
 
 /**
  * Pi v0.87 executes its original validated argument reference after tool_call.
- * Bind that reference to a preflight permit; deny if it changed since approval.
- * This is a host-specific candidate, not a general replacement-input hook.
+ * Bind the executing call's identity AND its validated argument reference to
+ * the permit; deny if either changed since approval. The adapter must derive
+ * call identity from the authentic host event, not untrusted model arguments.
  */
-export function bindPiExecutionInput(input: Record<string, unknown>, permit: PortablePermit): PortableBlock | { block: false } {
+export function bindPiExecutionInput(call: PortableAction, permit: PortablePermit): PortableBlock | { block: false } {
   try {
-    if (permit.block || permit.action.host !== "pi" || !plainData(input)
-        || JSON.stringify(input) !== JSON.stringify(permit.action.input)) {
-      return block("Pi execution input differs from approved invocation");
+    const { input } = call;
+    if (permit.block || permit.action.host !== "pi" || !plainData(call)
+        || JSON.stringify(call) !== JSON.stringify(permit.action)) {
+      return block("Pi execution call differs from approved invocation");
     }
     deepFreeze(input);
-    if (JSON.stringify(input) !== JSON.stringify(permit.action.input)) {
-      return block("Pi execution input changed during binding");
+    if (JSON.stringify(call) !== JSON.stringify(permit.action)) {
+      return block("Pi execution call changed during binding");
     }
     return { block: false };
   } catch {
