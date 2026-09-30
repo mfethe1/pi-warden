@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from contextvars import ContextVar
 from threading import Event, Thread
 
 if not __debug__:
@@ -12,6 +13,9 @@ if not os.environ.get('HERMES_HOME'):
     raise RuntimeError('isolated HERMES_HOME required')
 sys.path.insert(0, str(Path(__file__).parent))
 from owned_scope import Denied, OwnedScope
+from outcome_ledger import OutcomeLedger
+
+owner_operation = ContextVar[tuple[str, str, str] | None]('owner_operation', default=None)
 from hermes_cli.plugins import get_plugin_manager
 from model_tools import handle_function_call
 from tools import approval_context
@@ -38,14 +42,19 @@ def guard(**kwargs):
 
 with tempfile.TemporaryDirectory(prefix='warden-owned-') as directory:
     root = Path(directory)
+    ledger = OutcomeLedger(root / 'outcomes.db')
+    def effect(approved):
+        target = Path(approved['path'])
+        if target.parent != root:
+            raise Denied('outside scratch root')
+        target.write_text(approved['content'])
+        if approved['content'] == 'ERROR-AFTER-EFFECT':
+            raise RuntimeError('fixture failure after effect')
+        return json.dumps({'written': True})
+
     def execute(args, **kwargs):
         try:
-            approved = scope.consume(identity(), args)
-            target = Path(approved['path'])
-            if target.parent != root:
-                raise Denied('outside scratch root')
-            target.write_text(approved['content'])
-            return json.dumps({'written': True})
+            return ledger.execute(scope, identity(), owner_operation.get(), args, effect)
         except Denied as error:
             return json.dumps({'error': str(error)})
 
@@ -53,11 +62,18 @@ with tempfile.TemporaryDirectory(prefix='warden-owned-') as directory:
                       schema={'name': 'warden_owned_write', 'parameters': {'type': 'object'}},
                       handler=execute)
     manager._hooks['pre_tool_call'] = [guard]
-    def dispatch(call, content):
-        with scope.dispatch(('owned-session', call)):
-            return handle_function_call('warden_owned_write',
-                {'path': str(root / f'{call}.txt'), 'content': content},
-                session_id='owned-session', tool_call_id=call)
+    def operation(name):
+        return ('hermes', 'owned-writer', name)
+
+    def dispatch(call, content, op=None):
+        token = owner_operation.set(operation(op or call))
+        try:
+            with scope.dispatch(('owned-session', call)):
+                return handle_function_call('warden_owned_write',
+                    {'path': str(root / f'{call}.txt'), 'content': content},
+                    session_id='owned-session', tool_call_id=call)
+        finally:
+            owner_operation.reset(token)
 
     result = dispatch('allowed', 'APPROVED')
     assert (root / 'allowed.txt').read_text() == 'APPROVED', result
@@ -68,6 +84,19 @@ with tempfile.TemporaryDirectory(prefix='warden-owned-') as directory:
         pass
     assert (root / 'allowed.txt').read_text() == 'APPROVED'
     print('PASS: real dispatch writes approved bytes once')
+    assert ledger.state(operation('allowed')) == 'completed'
+    result = dispatch('fresh-call', 'REPEAT', op='allowed')
+    assert 'reconciliation required' in result and not (root / 'fresh-call.txt').exists(), result
+    print('PASS: completed operation denies fresh-call repeat')
+
+    result = dispatch('failed-effect', 'ERROR-AFTER-EFFECT')
+    assert 'error' in result, result
+    assert (root / 'failed-effect.txt').read_text() == 'ERROR-AFTER-EFFECT'
+    assert ledger.state(operation('failed-effect')) == 'outcome-unknown'
+    ledger = OutcomeLedger(root / 'outcomes.db')
+    result = dispatch('unknown-retry', 'REPEAT', op='failed-effect')
+    assert 'reconciliation required' in result and not (root / 'unknown-retry.txt').exists(), result
+    print('PASS: post-effect error retains durable hold and denies fresh retry')
 
     assent = False
     result = dispatch('declined', 'DENIED')
@@ -114,4 +143,4 @@ worker.join(3)
 assert not worker.is_alive()
 assert failures == ['scope closed before assent'], failures
 print('PASS: closed owner scope rejects late assent')
-print('LIMIT: simulated approver, owner-supplied IDs, owned handler only; no portable preflight or durable ledger integration')
+print('LIMIT: simulated approver, owner-supplied IDs/operation keys, owned handler only; no portable preflight, authenticated ingress or reconciliation')
