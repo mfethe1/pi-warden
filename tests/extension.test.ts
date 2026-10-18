@@ -14,6 +14,7 @@ import { policyMatches, CONSCIENCE_BETA_POLICY } from "../src/load.js";
 import { _testSetIndexRunning, assistantPlan } from "../src/extension.js";
 import { SHELL_RULES_CHECKS } from "../src/turn-rules.js";
 import { indexPath } from "../src/index-cmd.js";
+import { fileClockPast } from "./fs-clock.js";
 
 let temporary: string;
 let extension: Extension;
@@ -971,8 +972,9 @@ const withScratchBase = async (run: (base: string) => Promise<void>) => {
 /** Fires tool_call, runs `effect` as the command would, then fires tool_result with `output`. */
 const runCall = async (toolName: string, input: Record<string, unknown>, effect: () => Promise<unknown>, output = "") => {
   await toolCall(toolName, input);
-  // A path born in the same millisecond the call began does not count as created by it.
-  await new Promise(resolve => setTimeout(resolve, 5));
+  // A path born in the same millisecond the call began does not count as created by it, and file birth times
+  // trail the wall clock by up to a kernel tick, so wait until the file clock itself is past the call's start.
+  await fileClockPast(Date.now());
   await effect();
   await toolResult(toolName, input, output, false);
 };
@@ -989,7 +991,7 @@ test("session scratch: mktemp -d printing a $TMPDIR path, then rm -rf of it is n
   let made = "";
   const input = { command: "mktemp -d" };
   await toolCall("bash", input);
-  await new Promise(resolve => setTimeout(resolve, 5));
+  await fileClockPast(Date.now());
   made = await mkdtemp(join(tmpdir(), "tmp."));
   try {
     await toolResult("bash", input, `${made}\n`, false);
