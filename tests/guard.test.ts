@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { realpathSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import { TypeSafeIntegrationError } from "pi-typesafe";
 import { defaultConfig } from "../src/config.js";
 import { bornAfter, buildRequest, commandFamily, createdScratch, mktempOnly, scratchCandidates, describeAction, evaluateAction, formatVerdict, hostPaths, inertPathRules, intentSteer, isReadOnlyCommand, largeOutputNotice, matchPatterns, offTaskSteer, pruneScratch, scratchIdentity, steerFingerprint, SteerRepeatWindow, steerReason, stripDataText, textApproves, unknownExemptIds, isVisibleCommand, wardenHostPaths } from "../src/guard.js";
 import type { Judge } from "../src/guard.js";
+import { fileClockPast } from "./fs-clock.js";
 import { actionDetails } from "../src/trace.js";
 import { actionTokens } from "../src/widget.js";
 import { findSecrets, looksLikeSecretValue, partitionSecrets, redact, secretFingerprint, secretIds, syntheticish } from "../src/redact.js";
@@ -263,7 +264,7 @@ test("session scratch: a recorded path replaced by a new directory stays destruc
     await mkdir(probe);
     const scratch = records(realpathSync(probe));
     await rm(probe, { recursive: true });
-    await new Promise(resolve => setTimeout(resolve, 5));
+    await fileClockPast([...scratch.values()][0]!.birthtimeMs, base);
     await mkdir(probe);
     assert.ok(destructiveRm(matchPatterns("bash", { command: `rm -rf ${probe}` }, cwd, { scratch, platform: "darwin" })), "a different directory at the recorded path");
     pruneScratch(scratch);
@@ -277,7 +278,8 @@ test("session scratch: older content moved into a recorded directory stays destr
     const important = join(base, "important");
     await mkdir(important);
     await writeFile(join(important, "keep.txt"), "keep me\n");
-    await new Promise(resolve => setTimeout(resolve, 5));
+    // The scratch directory must be born strictly later than the content moved into it.
+    await fileClockPast(Math.max(statSync(important).birthtimeMs, statSync(join(important, "keep.txt")).birthtimeMs), base);
     const dir = join(base, "S", "x");
     await mkdir(dir, { recursive: true });
     const scratch = records(realpathSync(join(base, "S")), realpathSync(dir));
